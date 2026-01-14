@@ -1,0 +1,8 @@
+<svg width="200" height="32" viewBox="0 0 200 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+<!-- Ultrahuman Ring Air - Placeholder icon -->
+<!-- A simple ring/oval shape representing the smart ring -->
+<ellipse cx="100" cy="16" rx="25" ry="10" stroke="black" stroke-width="3" fill="none"/>
+<circle cx="100" cy="16" r="3" fill="black"/>
+<!-- U-like curve -->
+<path d="M85 16 Q85 8 100 8 Q115 8 115 16" stroke="black" stroke-width="2" fill="none"/>
+</svg>
