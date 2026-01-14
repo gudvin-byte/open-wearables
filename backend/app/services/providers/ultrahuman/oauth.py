@@ -23,7 +23,7 @@ class UltrahumanOAuth(BaseOAuthTemplate):
     def endpoints(self) -> ProviderEndpoints:
         """OAuth endpoints for authorization and token exchange."""
         return ProviderEndpoints(
-            authorize_url="https://auth.ultrahuman.com/authorize",
+            authorize_url="https://auth.ultrahuman.com/authorise",
             token_url="https://partner.ultrahuman.com/api/partners/oauth/token",
         )
 
