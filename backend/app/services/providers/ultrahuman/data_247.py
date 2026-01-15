@@ -115,15 +115,19 @@ class Ultrahuman247Data(Base247DataTemplate):
 
         # Values are typically in seconds
         time_in_bed_seconds = quick_metrics.get("time_in_bed", 0) or 0
-        deep_seconds = quick_metrics.get("deep_sleep", 0) or 0
-        rem_seconds = quick_metrics.get("rem_sleep", 0) or 0
-        light_seconds = quick_metrics.get("light_sleep", 0) or 0
-        awake_seconds = quick_metrics.get("awake", 0) or 0
 
-        # Efficiency
-        efficiency = raw_sleep.get("sleep_efficiency")  # Top level or inside metrics?
+        # Extract sleep stages from sleep_stages array
+        # "sleep_stages": [{"type": "deep_sleep", "stage_time": 3240}, ...]
+        sleep_stages = {s.get("type"): s.get("stage_time", 0) for s in raw_sleep.get("sleep_stages", [])}
+        deep_seconds = sleep_stages.get("deep_sleep", 0) or 0
+        rem_seconds = sleep_stages.get("rem_sleep", 0) or 0
+        light_seconds = sleep_stages.get("light_sleep", 0) or 0
+        awake_seconds = sleep_stages.get("awake", 0) or 0
+
+        # Efficiency from quick_metrics (type: "sleep_efic")
+        efficiency = quick_metrics.get("sleep_efic")
         if efficiency is None:
-            efficiency = quick_metrics.get("sleep_efficiency")
+            efficiency = raw_sleep.get("sleep_efficiency")
 
         internal_id = uuid4()
 
@@ -366,9 +370,9 @@ class Ultrahuman247Data(Base247DataTemplate):
                 continue
 
             for sample in samples:
+                recorded_at_str = sample.get("recorded_at")
                 try:
                     # Parse timestamp
-                    recorded_at_str = sample.get("recorded_at")
                     if not recorded_at_str:
                         continue
 
@@ -390,8 +394,10 @@ class Ultrahuman247Data(Base247DataTemplate):
                     count += 1
                 except Exception as e:
                     # Log but continue for other samples
-                    # For high volume data, debug level might be better than warning/error to avoid spam
-                    self.logger.debug(f"Failed to save {key} sample for user {user_id}: {e}")
+                    # Use warning level for first few errors to help debug issues
+                    self.logger.warning(
+                        f"Failed to save {key} sample for user {user_id} at {recorded_at_str or 'unknown time'}: {e}"
+                    )
 
         return count
 
