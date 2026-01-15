@@ -1,17 +1,18 @@
 """Ultrahuman Ring Air 24/7 data implementation for sleep, recovery, and activity samples."""
 
-from contextlib import suppress
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any
 from uuid import UUID, uuid4
 
 from app.database import DbSession
-from app.models import EventRecord, ExternalDeviceMapping
+from app.models import DataPointSeries, EventRecord, ExternalDeviceMapping
 from app.repositories import EventRecordRepository, UserConnectionRepository
+from app.repositories.data_point_series_repository import DataPointSeriesRepository
 from app.repositories.external_mapping_repository import ExternalMappingRepository
-from app.schemas import EventRecordCreate
+from app.schemas import EventRecordCreate, TimeSeriesSampleCreate
 from app.schemas.event_record_detail import EventRecordDetailCreate
+from app.schemas.series_types import SeriesType
 from app.services.event_record_service import event_record_service
 from app.services.providers.api_client import make_authenticated_request
 from app.services.providers.templates.base_247_data import Base247DataTemplate
@@ -31,6 +32,7 @@ class Ultrahuman247Data(Base247DataTemplate):
         self.event_record_repo = EventRecordRepository(EventRecord)
         self.mapping_repo = ExternalMappingRepository(ExternalDeviceMapping)
         self.connection_repo = UserConnectionRepository()
+        self.data_point_repo = DataPointSeriesRepository(DataPointSeries)
 
     def _make_api_request(
         self,
@@ -74,9 +76,14 @@ class Ultrahuman247Data(Base247DataTemplate):
                 metrics = response["data"]["metric_data"]
                 for item in metrics:
                     item["date"] = date_str
+                    # Inject date into the inner object for use in normalization
+                    if "object" in item and isinstance(item["object"], dict):
+                        item["ultrahuman_date"] = date_str
                 return metrics
         except Exception as e:
             self.logger.warning(f"Failed to fetch metrics for {date_str}: {e}")
+            # Don't swallow unexpected errors completely, but for daily sync we might want to continue
+            # If it's a critical auth error it might be better to raise, but the base class usually handles auth.
 
         return []
 
@@ -86,14 +93,14 @@ class Ultrahuman247Data(Base247DataTemplate):
 
     def normalize_sleep(
         self,
-        raw_sleep_obj: dict[str, Any],
+        raw_sleep: dict[str, Any],
         user_id: UUID,
-        date_str: str,
     ) -> dict[str, Any]:
         """Normalize Ultrahuman sleep data (from 'Sleep' type object) to our schema."""
         # Times are unix timestamps
-        bedtime_start_ts = raw_sleep_obj.get("bedtime_start")
-        bedtime_end_ts = raw_sleep_obj.get("bedtime_end")
+        bedtime_start_ts = raw_sleep.get("bedtime_start")
+        bedtime_end_ts = raw_sleep.get("bedtime_end")
+        date_str = raw_sleep.get("ultrahuman_date")
 
         start_dt = None
         end_dt = None
@@ -104,18 +111,17 @@ class Ultrahuman247Data(Base247DataTemplate):
 
         # Extract durations from quick_metrics
         # "quick_metrics": [{"type": "time_in_bed", "value": 27000}, ...]
-        quick_metrics = {m.get("type"): m.get("value", 0) for m in raw_sleep_obj.get("quick_metrics", [])}
+        quick_metrics = {m.get("type"): m.get("value", 0) for m in raw_sleep.get("quick_metrics", [])}
 
         # Values are typically in seconds
         time_in_bed_seconds = quick_metrics.get("time_in_bed", 0) or 0
-        total_sleep_seconds = quick_metrics.get("total_sleep", 0) or 0
         deep_seconds = quick_metrics.get("deep_sleep", 0) or 0
         rem_seconds = quick_metrics.get("rem_sleep", 0) or 0
         light_seconds = quick_metrics.get("light_sleep", 0) or 0
         awake_seconds = quick_metrics.get("awake", 0) or 0
 
         # Efficiency
-        efficiency = raw_sleep_obj.get("sleep_efficiency")  # Top level or inside metrics?
+        efficiency = raw_sleep.get("sleep_efficiency")  # Top level or inside metrics?
         if efficiency is None:
             efficiency = quick_metrics.get("sleep_efficiency")
 
@@ -138,7 +144,7 @@ class Ultrahuman247Data(Base247DataTemplate):
                 "awake_seconds": int(awake_seconds),
             },
             "ultrahuman_date": date_str,
-            "raw": raw_sleep_obj,
+            "raw": raw_sleep,
         }
 
     def save_sleep_data(
@@ -211,24 +217,24 @@ class Ultrahuman247Data(Base247DataTemplate):
 
     def normalize_recovery(
         self,
-        recovery_items: dict[str, Any],  # Map of type -> object
+        raw_recovery: dict[str, Any],
         user_id: UUID,
-        date_str: str,
     ) -> dict[str, Any]:
         """Normalize Ultrahuman recovery data to our schema."""
+        date_str = raw_recovery.get("ultrahuman_date")
 
         recovery_index = None
         movement_index = None
         metabolic_score = None
 
-        if "recovery_index" in recovery_items:
-            recovery_index = recovery_items["recovery_index"].get("value")
+        if "recovery_index" in raw_recovery:
+            recovery_index = raw_recovery["recovery_index"].get("value")
 
-        if "movement_index" in recovery_items:
-            movement_index = recovery_items["movement_index"].get("value")
+        if "movement_index" in raw_recovery:
+            movement_index = raw_recovery["movement_index"].get("value")
 
-        if "metabolic_score" in recovery_items:
-            metabolic_score = recovery_items["metabolic_score"].get("value")
+        if "metabolic_score" in raw_recovery:
+            metabolic_score = raw_recovery["metabolic_score"].get("value")
 
         return {
             "id": uuid4(),
@@ -239,7 +245,7 @@ class Ultrahuman247Data(Base247DataTemplate):
             "recovery_index": recovery_index,
             "movement_index": movement_index,
             "metabolic_score": metabolic_score,
-            "raw": recovery_items,
+            "raw": raw_recovery,
         }
 
     # -------------------------------------------------------------------------
@@ -248,12 +254,12 @@ class Ultrahuman247Data(Base247DataTemplate):
 
     def normalize_activity_samples(
         self,
-        sample_items: dict[str, Any],  # Map of type -> object
+        raw_samples: dict[str, Any],
         user_id: UUID,
     ) -> dict[str, list[dict[str, Any]]]:
         """Normalize activity samples into categorized data.
 
-        sample_items keys: 'hr', 'hrv', 'temp', 'steps'
+        raw_samples keys: 'hr', 'hrv', 'temp', 'steps'
         """
         result = {
             "heart_rate": [],
@@ -263,8 +269,8 @@ class Ultrahuman247Data(Base247DataTemplate):
         }
 
         # Heart rate samples
-        if "hr" in sample_items:
-            values = sample_items["hr"].get("values", [])
+        if "hr" in raw_samples:
+            values = raw_samples["hr"].get("values", [])
             for val in values:
                 ts = val.get("timestamp")
                 recorded_at = datetime.fromtimestamp(ts, tz=timezone.utc).isoformat() if ts else None
@@ -281,8 +287,8 @@ class Ultrahuman247Data(Base247DataTemplate):
                     )
 
         # HRV samples
-        if "hrv" in sample_items:
-            values = sample_items["hrv"].get("values", [])
+        if "hrv" in raw_samples:
+            values = raw_samples["hrv"].get("values", [])
             for val in values:
                 ts = val.get("timestamp")
                 recorded_at = datetime.fromtimestamp(ts, tz=timezone.utc).isoformat() if ts else None
@@ -299,8 +305,8 @@ class Ultrahuman247Data(Base247DataTemplate):
                     )
 
         # Temperature samples (type='temp')
-        if "temp" in sample_items:
-            values = sample_items["temp"].get("values", [])
+        if "temp" in raw_samples:
+            values = raw_samples["temp"].get("values", [])
             for val in values:
                 ts = val.get("timestamp")
                 recorded_at = datetime.fromtimestamp(ts, tz=timezone.utc).isoformat() if ts else None
@@ -317,8 +323,8 @@ class Ultrahuman247Data(Base247DataTemplate):
                     )
 
         # Steps (type='steps')
-        if "steps" in sample_items:
-            values = sample_items["steps"].get("values", [])
+        if "steps" in raw_samples:
+            values = raw_samples["steps"].get("values", [])
             for val in values:
                 ts = val.get("timestamp")
                 steps_val = val.get("value")
@@ -336,6 +342,58 @@ class Ultrahuman247Data(Base247DataTemplate):
                     )
 
         return result
+
+    def save_activity_samples(
+        self,
+        db: DbSession,
+        user_id: UUID,
+        normalized_samples: dict[str, list[dict[str, Any]]],
+    ) -> int:
+        """Save normalized activity samples (HR, HRV, etc.) to DataPointSeries."""
+        count = 0
+
+        # Map internal keys to SeriesType
+        type_mapping = {
+            "heart_rate": SeriesType.heart_rate,
+            "hrv": SeriesType.heart_rate_variability_sdnn,
+            "temperature": SeriesType.body_temperature,
+            "steps": SeriesType.steps,
+        }
+
+        for key, samples in normalized_samples.items():
+            series_type = type_mapping.get(key)
+            if not series_type:
+                continue
+
+            for sample in samples:
+                try:
+                    # Parse timestamp
+                    recorded_at_str = sample.get("recorded_at")
+                    if not recorded_at_str:
+                        continue
+
+                    recorded_at = datetime.fromisoformat(recorded_at_str.replace("Z", "+00:00"))
+
+                    # Create sample
+                    ts_sample = TimeSeriesSampleCreate(
+                        id=uuid4(),
+                        user_id=user_id,
+                        provider_name=self.provider_name,
+                        recorded_at=recorded_at,
+                        value=Decimal(str(sample.get("value"))),
+                        series_type=series_type,
+                        external_device_mapping_id=None,
+                        # ultrahuman doesn't give a unique ID per sample, so we rely on unique constraint (user, provider, type, time)
+                    )
+
+                    self.data_point_repo.create(db, ts_sample)
+                    count += 1
+                except Exception as e:
+                    # Log but continue for other samples
+                    # For high volume data, debug level might be better than warning/error to avoid spam
+                    self.logger.debug(f"Failed to save {key} sample for user {user_id}: {e}")
+
+        return count
 
     # -------------------------------------------------------------------------
     # Combined Load (Main Entry Point)
@@ -383,7 +441,7 @@ class Ultrahuman247Data(Base247DataTemplate):
             # 1. Process Sleep
             if "Sleep" in items_by_type:
                 try:
-                    normalized_sleep = self.normalize_sleep(items_by_type["Sleep"], user_id, date_str)
+                    normalized_sleep = self.normalize_sleep(items_by_type["Sleep"], user_id)
                     self.save_sleep_data(db, user_id, normalized_sleep)
                     results["sleep_sessions_synced"] += 1
                 except Exception as e:
@@ -403,9 +461,8 @@ class Ultrahuman247Data(Base247DataTemplate):
                         sample_inputs[t] = items_by_type[t]
 
                 normalized_samples = self.normalize_activity_samples(sample_inputs, user_id)
-                # saved_count = self.save_activity_samples(db, user_id, normalized_samples)
-                # results["activity_samples"] += saved_count
-                results["activity_samples"] = 0  # Placeholder until save is implemented
+                saved_count = self.save_activity_samples(db, user_id, normalized_samples)
+                results["activity_samples"] += saved_count
             except Exception as e:
                 self.logger.error(f"Failed to process samples for {date_str}: {e}")
 
@@ -416,17 +473,17 @@ class Ultrahuman247Data(Base247DataTemplate):
     # Stub implementations for abstract methods that we don't use directly anymore
     # but might be required by the interface if strictly enforced (though python is loose)
 
-    def get_sleep_data(self, *args, **kwargs):
+    def get_sleep_data(self, *args, **kwargs) -> list[dict[str, Any]]:
         return []
 
-    def get_recovery_data(self, *args, **kwargs):
+    def get_recovery_data(self, *args, **kwargs) -> list[dict[str, Any]]:
         return []
 
-    def get_activity_samples(self, *args, **kwargs):
+    def get_activity_samples(self, *args, **kwargs) -> list[dict[str, Any]]:
         return []
 
-    def get_daily_activity_statistics(self, *args, **kwargs):
+    def get_daily_activity_statistics(self, *args, **kwargs) -> list[dict[str, Any]]:
         return []
 
-    def normalize_daily_activity(self, *args, **kwargs):
+    def normalize_daily_activity(self, *args, **kwargs) -> dict[str, Any]:
         return {}

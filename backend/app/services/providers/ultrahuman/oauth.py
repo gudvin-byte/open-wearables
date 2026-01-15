@@ -1,8 +1,12 @@
 """Ultrahuman Ring Air OAuth 2.0 implementation."""
 
+import logging
+
 import httpx
 
 from app.config import settings
+from app.repositories.user_connection_repository import UserConnectionRepository
+from app.repositories.user_repository import UserRepository
 from app.schemas import (
     AuthenticationMethod,
     OAuthTokenResponse,
@@ -18,6 +22,16 @@ class UltrahumanOAuth(BaseOAuthTemplate):
     Ultrahuman uses standard OAuth 2.0 with authorization code grant.
     API documentation: https://vision.ultrahuman.com/developer-docs
     """
+
+    def __init__(
+        self,
+        user_repo: UserRepository,
+        connection_repo: UserConnectionRepository,
+        provider_name: str,
+        api_base_url: str,
+    ):
+        super().__init__(user_repo, connection_repo, provider_name, api_base_url)
+        self.logger = logging.getLogger(self.__class__.__name__)
 
     @property
     def endpoints(self) -> ProviderEndpoints:
@@ -63,5 +77,9 @@ class UltrahumanOAuth(BaseOAuthTemplate):
                 "user_id": str(provider_user_id) if provider_user_id else None,
                 "username": provider_username,
             }
-        except Exception:
+        except httpx.HTTPError as e:
+            self.logger.error(f"HTTP error fetching Ultrahuman user profile for user {user_id}: {e}")
+            return {"user_id": None, "username": None}
+        except Exception as e:
+            self.logger.error(f"Unexpected error fetching Ultrahuman user profile for user {user_id}: {e}")
             return {"user_id": None, "username": None}

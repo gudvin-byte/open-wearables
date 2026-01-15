@@ -97,9 +97,7 @@ class Settings(BaseSettings):
     # ULTRAHUMAN OAUTH SETTINGS
     ultrahuman_client_id: str | None = None
     ultrahuman_client_secret: SecretStr | None = None
-    ultrahuman_redirect_uri: str = (
-        "https://vitascopic-rosita-squabbiest.ngrok-free.dev/api/v1/oauth/ultrahuman/callback"
-    )
+    ultrahuman_redirect_uri: str = "http://localhost:8000/api/v1/oauth/ultrahuman/callback"
     ultrahuman_default_scope: str = "ring_data cgm_data profile"
 
     # EMAIL SETTINGS (Resend)
