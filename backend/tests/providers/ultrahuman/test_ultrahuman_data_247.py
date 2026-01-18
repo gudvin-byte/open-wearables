@@ -209,31 +209,35 @@ class TestUltrahumanActivitySamples:
             oauth=oauth,
         )
 
-        raw_samples = {
-            "hr": {
+        raw_samples = [
+            {
+                "type": "hr",
                 "values": [
                     {"timestamp": 1705309200, "value": 72},
                     {"timestamp": 1705309500, "value": 75},
-                ]
+                ],
             },
-            "hrv": {
+            {
+                "type": "hrv",
                 "values": [
                     {"timestamp": 1705309200, "value": 45},
                     {"timestamp": 1705309500, "value": 50},
-                ]
+                ],
             },
-            "temp": {
+            {
+                "type": "temp",
                 "values": [
                     {"timestamp": 1705309200, "value": 36.5},
                     {"timestamp": 1705309500, "value": 36.6},
-                ]
+                ],
             },
-            "steps": {
+            {
+                "type": "steps",
                 "values": [
                     {"timestamp": 1705309200, "value": 8500},
-                ]
+                ],
             },
-        }
+        ]
 
         # Act
         normalized = data_247.normalize_activity_samples(raw_samples, user.id)
