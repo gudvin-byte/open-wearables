@@ -349,7 +349,7 @@ class Ultrahuman247Data(Base247DataTemplate):
                     ts = val.get("timestamp")
                     steps_val = val.get("value")
                     recorded_at = datetime.fromtimestamp(ts, tz=timezone.utc).isoformat() if ts else None
-                    if recorded_at and steps_val and steps_val > 0:
+                    if recorded_at and steps_val is not None:
                         result["steps"].append(
                             {
                                 "id": uuid4(),
@@ -371,6 +371,14 @@ class Ultrahuman247Data(Base247DataTemplate):
     ) -> int:
         """Save normalized activity samples (HR, HRV, etc.) to DataPointSeries."""
         count = 0
+
+        # Get or create external device mapping for this user
+        device_mapping = self.mapping_repo.ensure_mapping(
+            db_session=db,
+            user_id=user_id,
+            provider_name=self.provider_name,
+            device_id=None,
+        )
 
         # Map internal keys to SeriesType
         type_mapping = {
@@ -402,7 +410,7 @@ class Ultrahuman247Data(Base247DataTemplate):
                         recorded_at=recorded_at,
                         value=Decimal(str(sample.get("value"))),
                         series_type=series_type,
-                        external_device_mapping_id=None,
+                        external_device_mapping_id=device_mapping.id,
                     )
 
                     self.data_point_repo.create(db, ts_sample)
@@ -497,7 +505,9 @@ class Ultrahuman247Data(Base247DataTemplate):
                     sample_inputs = []
                     for t in ["hr", "hrv", "temp", "steps"]:
                         if t in items_by_type:
-                            sample_inputs.append({"type": t, "values": items_by_type[t]})
+                            item_obj = items_by_type[t]
+                            if isinstance(item_obj, dict) and "values" in item_obj:
+                                sample_inputs.append({"type": t, "values": item_obj["values"]})
 
                     if sample_inputs:
                         normalized_samples = self.normalize_activity_samples(sample_inputs, user_id)
