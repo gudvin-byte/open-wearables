@@ -39,9 +39,9 @@ class EventRecordBase(BaseModel):
     type: str | None = Field(None, description="Provider-specific subtype, e.g. running")
 
     source_name: str = Field(description="Source/app name")
-    device_id: str | None = Field(
+    device_model: str | None = Field(
         None,
-        description="Optional device identifier used to resolve the external mapping",
+        description="Device model/name for data source tracking",
     )
 
     duration_seconds: int | None = None
@@ -50,22 +50,14 @@ class EventRecordBase(BaseModel):
 
 
 class EventRecordCreate(EventRecordBase):
-    """Schema for creating an event record entry."""
-
     id: UUID
-    external_id: str | None = Field(
-        None,
-        description="Provider-specific record identifier (e.g., Suunto workoutId) for deduplication.",
-    )
-    provider_name: str | None = Field(
-        None,
-        description="Provider name (e.g., 'suunto', 'garmin') for external mapping.",
-    )
+    external_id: str | None = None
+    source: str | None = None
     user_id: UUID
-    external_device_mapping_id: UUID | None = Field(
-        None,
-        description="Existing mapping identifier if the caller has already created one.",
-    )
+    provider: str | None = None
+    user_connection_id: UUID | None = None
+    data_source_id: UUID | None = None
+    software_version: str | None = None
 
 
 class EventRecordUpdate(EventRecordBase):
@@ -78,8 +70,8 @@ class EventRecordResponse(EventRecordBase):
     id: UUID
     external_id: str | None
     user_id: UUID | None
-    provider_name: str | None
-    external_device_mapping_id: UUID | None
+    source: str | None
+    data_source_id: UUID | None
 
 
 class EventRecordQueryParams(BaseModel):
@@ -102,10 +94,10 @@ class EventRecordQueryParams(BaseModel):
     record_type: str | None = Field(None, description="Subtype filter (e.g. HKWorkoutActivityTypeRunning)")
 
     # Source filtering
-    device_id: str | None = Field(None, description="Filter by originating device id")
+    device_model: str | None = Field(None, description="Filter by device model")
     source_name: str | None = Field(None, description="Filter by source/app name")
-    provider_name: str | None = Field(None, description="Filter by provider name")
-    external_device_mapping_id: UUID | None = Field(None, description="Filter by device mapping identifier")
+    source: str | None = Field(None, description="Filter by data source")
+    data_source_id: UUID | None = Field(None, description="Filter by data source identifier")
 
     # Duration filtering
     min_duration: int | None = Field(None, description="Minimum duration in seconds")

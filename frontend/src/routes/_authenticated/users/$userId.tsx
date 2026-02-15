@@ -20,8 +20,9 @@ import {
   useUser,
   useDeleteUser,
   useAppleXmlUpload,
-  useGenerateUserToken,
+  useGenerateInvitationCode,
 } from '@/hooks/api/use-users';
+import { ROUTES } from '@/lib/constants/routes';
 import { copyToClipboard } from '@/lib/utils/clipboard';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { ProfileSection } from '@/components/user/profile-section';
@@ -80,13 +81,13 @@ function UserDetailPage() {
   const { mutate: deleteUser, isPending: isDeleting } = useDeleteUser();
   const { handleUpload, isUploading: isUploadingFile } = useAppleXmlUpload();
   const {
-    mutate: generateToken,
-    data: tokenData,
-    isPending: isGeneratingToken,
-  } = useGenerateUserToken();
+    mutate: generateInvitationCode,
+    data: invitationCodeData,
+    isPending: isGeneratingCode,
+  } = useGenerateInvitationCode();
   const [copied, setCopied] = useState(false);
-  const [tokenCopied, setTokenCopied] = useState(false);
-  const [isTokenDialogOpen, setIsTokenDialogOpen] = useState(false);
+  const [codeCopied, setCodeCopied] = useState(false);
+  const [isCodeDialogOpen, setIsCodeDialogOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const isUploading = isUploadingFile(userId);
@@ -165,27 +166,27 @@ function UserDetailPage() {
   const handleDelete = () => {
     deleteUser(userId, {
       onSuccess: () => {
-        navigate({ to: '/users' });
+        navigate({ to: ROUTES.users });
       },
     });
   };
 
-  const handleGenerateToken = () => {
-    generateToken(userId, {
+  const handleGenerateInvitationCode = () => {
+    generateInvitationCode(userId, {
       onSuccess: () => {
-        setIsTokenDialogOpen(true);
+        setIsCodeDialogOpen(true);
       },
     });
   };
 
-  const handleCopyToken = async () => {
+  const handleCopyCode = async () => {
     const success = await copyToClipboard(
-      tokenData?.access_token || '',
-      'Token copied to clipboard'
+      invitationCodeData?.code || '',
+      'Invitation code copied to clipboard'
     );
     if (success) {
-      setTokenCopied(true);
-      setTimeout(() => setTokenCopied(false), 2000);
+      setCodeCopied(true);
+      setTimeout(() => setCodeCopied(false), 2000);
     }
   };
   if (!userLoading && !user) {
@@ -193,13 +194,12 @@ function UserDetailPage() {
       <div className="p-8">
         <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-12 text-center">
           <p className="text-zinc-400">User not found</p>
-          <Link
-            to="/users"
-            className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-zinc-800 text-white rounded-md text-sm font-medium hover:bg-zinc-700 transition-colors"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to Users
-          </Link>
+          <Button variant="outline" className="mt-4" asChild>
+            <Link to={ROUTES.users}>
+              <ArrowLeft className="h-4 w-4" />
+              Back to Users
+            </Link>
+          </Button>
         </div>
       </div>
     );
@@ -211,7 +211,7 @@ function UserDetailPage() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Link
-            to="/users"
+            to={ROUTES.users}
             className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-md transition-colors"
           >
             <ArrowLeft className="h-5 w-5" />
@@ -235,10 +235,10 @@ function UserDetailPage() {
           )}
         </div>
         <div className="flex items-center gap-2">
-          <button
+          <Button
+            variant="secondary"
             onClick={handleUploadClick}
             disabled={isUploading}
-            className="flex items-center gap-2 px-4 py-2 bg-white text-black rounded-md text-sm font-medium hover:bg-zinc-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isUploading ? (
               <>
@@ -251,7 +251,7 @@ function UserDetailPage() {
                 Upload Apple Health XML
               </>
             )}
-          </button>
+          </Button>
           <input
             ref={fileInputRef}
             type="file"
@@ -259,10 +259,7 @@ function UserDetailPage() {
             onChange={(e) => handleUpload(userId, e)}
             className="hidden"
           />
-          <button
-            onClick={handleCopyPairLink}
-            className="flex items-center gap-2 px-4 py-2 bg-white text-black rounded-md text-sm font-medium hover:bg-zinc-200 transition-colors"
-          >
+          <Button variant="secondary" onClick={handleCopyPairLink}>
             {copied ? (
               <>
                 <Check className="h-4 w-4 text-emerald-600" />
@@ -274,13 +271,13 @@ function UserDetailPage() {
                 Copy Pairing Link
               </>
             )}
-          </button>
-          <button
-            onClick={handleGenerateToken}
-            disabled={isGeneratingToken}
-            className="flex items-center gap-2 px-4 py-2 bg-white text-black rounded-md text-sm font-medium hover:bg-zinc-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          </Button>
+          <Button
+            variant="secondary"
+            onClick={handleGenerateInvitationCode}
+            disabled={isGeneratingCode}
           >
-            {isGeneratingToken ? (
+            {isGeneratingCode ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Generating...
@@ -288,19 +285,16 @@ function UserDetailPage() {
             ) : (
               <>
                 <Key className="h-4 w-4" />
-                Generate SDK Token
+                Generate Invitation Code
               </>
             )}
-          </button>
+          </Button>
           <AlertDialog>
             <AlertDialogTrigger asChild>
-              <button
-                disabled={isDeleting}
-                className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-md text-sm font-medium hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
+              <Button variant="destructive" disabled={isDeleting}>
                 <Trash2 className="h-4 w-4" />
                 {isDeleting ? 'Deleting...' : 'Delete User'}
-              </button>
+              </Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
@@ -312,10 +306,7 @@ function UserDetailPage() {
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction
-                  onClick={handleDelete}
-                  className="bg-red-600 text-white hover:bg-red-700"
-                >
+                <AlertDialogAction onClick={handleDelete}>
                   Delete
                 </AlertDialogAction>
               </AlertDialogFooter>
@@ -341,44 +332,48 @@ function UserDetailPage() {
         ))}
       </Tabs>
 
-      {/* Token Dialog */}
-      <Dialog open={isTokenDialogOpen} onOpenChange={setIsTokenDialogOpen}>
-        <DialogContent className="sm:max-w-2xl">
+      {/* Invitation Code Dialog */}
+      <Dialog open={isCodeDialogOpen} onOpenChange={setIsCodeDialogOpen}>
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>User Token Generated</DialogTitle>
+            <DialogTitle>Invitation Code Generated</DialogTitle>
             <DialogDescription>
-              This token has infinite expiration time and can be used to access
-              SDK endpoints for this user. Store it securely.
+              Share this code with the mobile app user. They can enter it to
+              receive SDK access without manually configuring tokens. The code
+              is single-use and will expire.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="token" className="text-zinc-300">
-                Access Token
+              <Label htmlFor="invitation-code" className="text-zinc-300">
+                Invitation Code
               </Label>
               <div className="flex items-center gap-2">
                 <Input
-                  id="token"
+                  id="invitation-code"
                   readOnly
-                  value={tokenData?.access_token || ''}
-                  className="bg-zinc-800 border-zinc-700 font-mono text-sm"
+                  value={invitationCodeData?.code || ''}
+                  className="bg-zinc-800 border-zinc-700 font-mono text-lg tracking-widest text-center focus-visible:ring-0"
                 />
                 <Button
-                  onClick={handleCopyToken}
+                  onClick={handleCopyCode}
                   variant="outline"
                   size="icon"
                   className="shrink-0"
                 >
-                  {tokenCopied ? (
+                  {codeCopied ? (
                     <Check className="h-4 w-4 text-emerald-500" />
                   ) : (
                     <Copy className="h-4 w-4" />
                   )}
                 </Button>
               </div>
-              <p className="text-xs text-zinc-500">
-                Token type: {tokenData?.token_type || 'bearer'}
-              </p>
+              {invitationCodeData?.expires_at && (
+                <p className="text-xs text-zinc-500">
+                  Expires:{' '}
+                  {new Date(invitationCodeData.expires_at).toLocaleString()}
+                </p>
+              )}
             </div>
           </div>
         </DialogContent>

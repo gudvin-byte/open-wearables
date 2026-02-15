@@ -227,6 +227,7 @@ uv run ty check .
 uv run pytest -v --cov=app
 ```
 
+Use `uv add <package-name>` to add new dependencies (automatically updates pyproject.toml, lockfile, and venv).
 Run `uv run ruff check . --fix && uv run ruff format .` after making changes.
 
 ## Detailed Layer Rules
@@ -342,7 +343,35 @@ app/api/routes/
 - Define functions as `async` by default
 - Use **kebab-case** for paths: `/heart-rate`, `/import-data`
 - Keep route code minimal, delegate to services
+- **No trailing slashes:** Use `""` (empty string) instead of `"/"` for root routes on prefixed routers. A `"/"` path creates a trailing-slash canonical URL, causing FastAPI 307 redirects that break behind HTTPS reverse proxies.
 
 **Flow:**
 - Request: request → main.py → head_router → version_router → router → endpoint → service
 - Response: service → response_model validation → router → version_router → head_router → main.py → client
+
+## Verifying Changes
+
+When asked or when you consider it appropriate, you can verify changes in several ways:
+
+### API Testing
+```bash
+# Test endpoints with curl (app runs on localhost:8000)
+curl -X GET http://localhost:8000/api/v1/endpoint
+curl -X POST http://localhost:8000/api/v1/endpoint -H "Content-Type: application/json" -d '{"key": "value"}'
+```
+
+### Database Verification
+```bash
+# Connect to PostgreSQL
+docker exec -it postgres__open-wearables psql -U open-wearables -d open-wearables
+
+# Example queries
+SELECT * FROM table_name LIMIT 5;
+\dt  # list tables
+```
+
+### Logs
+```bash
+docker compose logs -f app          # API logs
+docker compose logs -f celery-worker # Worker logs
+```

@@ -9,14 +9,20 @@ from .apple.auto_export.json_schemas import (
 from .apple.auto_export.json_schemas import (
     WorkoutJSON as AEWorkoutJSON,
 )
-from .apple.healthkit.record_import import (
-    RecordJSON as HKRecordJSON,
+from .apple.healthkit.sync_request import (
+    MetricRecord as HKMetricRecordJSON,
 )
-from .apple.healthkit.workout_import import (
-    WorkoutJSON as HKWorkoutJSON,
+from .apple.healthkit.sync_request import (
+    SleepRecord as HKSleepRecordJSON,
 )
-from .apple.healthkit.workout_import import (
-    WorkoutStatisticJSON as HKWorkoutStatisticJSON,
+from .apple.healthkit.sync_request import (
+    SyncRequest as AppleHealthDataRequest,
+)
+from .apple.healthkit.sync_request import (
+    Workout as HKWorkoutJSON,
+)
+from .apple.healthkit.sync_request import (
+    WorkoutStatistic as HKWorkoutStatisticJSON,
 )
 from .application import (
     ApplicationCreate,
@@ -29,11 +35,16 @@ from .common import (
     RootJSON,
 )
 from .common_types import (
-    DataSource,
     ErrorDetails,
     PaginatedResponse,
     Pagination,
+    SourceMetadata,
     TimeseriesMetadata,
+)
+from .data_source import (
+    DataSourceCreate,
+    DataSourceResponse,
+    DataSourceUpdate,
 )
 from .developer import (
     DeveloperCreate,
@@ -41,6 +52,14 @@ from .developer import (
     DeveloperRead,
     DeveloperUpdate,
     DeveloperUpdateInternal,
+)
+from .device_type import DeviceType
+from .device_type_priority import (
+    DeviceTypePriorityBulkUpdate,
+    DeviceTypePriorityCreate,
+    DeviceTypePriorityListResponse,
+    DeviceTypePriorityResponse,
+    DeviceTypePriorityUpdate,
 )
 from .error_codes import ErrorCode
 from .event_record import (
@@ -63,11 +82,6 @@ from .events import (
     Workout,
     WorkoutDetailed,
     WorkoutType,
-)
-from .external_mapping import (
-    ExternalMappingCreate,
-    ExternalMappingResponse,
-    ExternalMappingUpdate,
 )
 from .filter_params import FilterParams
 from .garmin.activity_import import (
@@ -112,6 +126,13 @@ from .personal_record import (
 from .polar.exercise_import import (
     ExerciseJSON as PolarExerciseJSON,
 )
+from .provider_priority import (
+    ProviderPriorityBulkUpdate,
+    ProviderPriorityCreate,
+    ProviderPriorityListResponse,
+    ProviderPriorityResponse,
+    ProviderPriorityUpdate,
+)
 from .provider_setting import (
     BulkProviderSettingsUpdate,
     ProviderSettingRead,
@@ -120,6 +141,9 @@ from .provider_setting import (
 from .response import UploadDataResponse
 from .sdk import SDKAuthContext, SDKTokenRequest
 from .series_types import SeriesType
+from .strava.activity_import import (
+    ActivityJSON as StravaActivityJSON,
+)
 from .summaries import (
     ActivitySummary,
     BloodPressure,
@@ -160,6 +184,10 @@ from .timeseries import (
     TimeSeriesSampleCreate,
     TimeSeriesSampleResponse,
     TimeSeriesSampleUpdate,
+)
+from .token import (
+    RefreshTokenRequest,
+    TokenResponse,
 )
 from .user import (
     UserCreate,
@@ -228,9 +256,9 @@ __all__ = [
     "EventRecordDetailResponse",
     "EventRecordDetailUpdate",
     "WorkoutType",
-    "ExternalMappingCreate",
-    "ExternalMappingUpdate",
-    "ExternalMappingResponse",
+    "DataSourceCreate",
+    "DataSourceUpdate",
+    "DataSourceResponse",
     "ActivityAggregateResult",
     "ActiveMinutesResult",
     "IntensityMinutesResult",
@@ -245,9 +273,11 @@ __all__ = [
     "SystemInfoResponse",
     "CountWithGrowth",
     "DataPointsInfo",
-    "HKRecordJSON",
+    "HKMetricRecordJSON",
+    "HKSleepRecordJSON",
     "HKWorkoutJSON",
     "HKWorkoutStatisticJSON",
+    "AppleHealthDataRequest",
     "AEWorkoutJSON",
     "AEHeartRateEntryJSON",
     "AEActiveEnergyEntryJSON",
@@ -270,6 +300,8 @@ __all__ = [
     "GarminRespirationJSON",
     # Polar schemas
     "PolarExerciseJSON",
+    # Strava schemas
+    "StravaActivityJSON",
     # Whoop schemas
     "WhoopWorkoutJSON",
     "WhoopWorkoutCollectionJSON",
@@ -282,7 +314,7 @@ __all__ = [
     "SyncAllUsersResult",
     "SyncVendorDataResult",
     # Common Types
-    "DataSource",
+    "SourceMetadata",
     "ErrorDetails",
     "PaginatedResponse",
     "Pagination",
@@ -303,4 +335,20 @@ __all__ = [
     "RecoverySummary",
     "SleepStagesSummary",
     "SleepSummary",
+    # Priority schemas
+    "ProviderPriorityCreate",
+    "ProviderPriorityUpdate",
+    "ProviderPriorityResponse",
+    "ProviderPriorityListResponse",
+    "ProviderPriorityBulkUpdate",
+    "DeviceTypePriorityCreate",
+    "DeviceTypePriorityUpdate",
+    "DeviceTypePriorityResponse",
+    "DeviceTypePriorityListResponse",
+    "DeviceTypePriorityBulkUpdate",
+    # Device type
+    "DeviceType",
+    # Token schemas
+    "TokenResponse",
+    "RefreshTokenRequest",
 ]
