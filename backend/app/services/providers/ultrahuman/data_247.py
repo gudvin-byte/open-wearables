@@ -8,10 +8,9 @@ from uuid import UUID, uuid4
 from fastapi import HTTPException
 
 from app.database import DbSession
-from app.models import DataPointSeries, EventRecord, ExternalDeviceMapping
+from app.models import DataPointSeries, EventRecord
 from app.repositories import EventRecordRepository, UserConnectionRepository
 from app.repositories.data_point_series_repository import DataPointSeriesRepository
-from app.repositories.external_mapping_repository import ExternalMappingRepository
 from app.schemas import EventRecordCreate, TimeSeriesSampleCreate
 from app.schemas.event_record_detail import EventRecordDetailCreate
 from app.schemas.series_types import SeriesType
@@ -32,7 +31,6 @@ class Ultrahuman247Data(Base247DataTemplate):
     ):
         super().__init__(provider_name, api_base_url, oauth)
         self.event_record_repo = EventRecordRepository(EventRecord)
-        self.mapping_repo = ExternalMappingRepository(ExternalDeviceMapping)
         self.connection_repo = UserConnectionRepository()
         self.data_point_repo = DataPointSeriesRepository(DataPointSeries)
 
@@ -87,7 +85,7 @@ class Ultrahuman247Data(Base247DataTemplate):
                     item["date"] = date_str
                     # Inject date into the inner object for use in normalization
                     if "object" in item and isinstance(item["object"], dict):
-                        item["ultrahuman_date"] = date_str
+                        item["object"]["ultrahuman_date"] = date_str
                 return metrics
         except HTTPException as e:
             # Fatal errors - should be raised to trigger token refresh or invalidate connection
@@ -370,15 +368,7 @@ class Ultrahuman247Data(Base247DataTemplate):
         normalized_samples: dict[str, list[dict[str, Any]]],
     ) -> int:
         """Save normalized activity samples (HR, HRV, etc.) to DataPointSeries."""
-        count = 0
-
-        # Get or create external device mapping for this user
-        device_mapping = self.mapping_repo.ensure_mapping(
-            db_session=db,
-            user_id=user_id,
-            provider_name=self.provider_name,
-            device_id=None,
-        )
+        samples_to_create: list[TimeSeriesSampleCreate] = []
 
         # Map internal keys to SeriesType
         type_mapping = {
@@ -407,22 +397,24 @@ class Ultrahuman247Data(Base247DataTemplate):
                         id=uuid4(),
                         user_id=user_id,
                         provider_name=self.provider_name,
+                        device_id="Ultrahuman Ring Air",
                         recorded_at=recorded_at,
                         value=Decimal(str(sample.get("value"))),
                         series_type=series_type,
-                        external_device_mapping_id=device_mapping.id,
                     )
 
-                    self.data_point_repo.create(db, ts_sample)
-                    count += 1
+                    samples_to_create.append(ts_sample)
                 except Exception as e:
                     # Log but continue for other samples
-                    # Use warning level for first few errors to help debug issues
                     self.logger.warning(
-                        f"Failed to save {key} sample for user {user_id} at {recorded_at_str or 'unknown time'}: {e}"
+                        f"Failed to parse {key} sample for user {user_id} at {recorded_at_str or 'unknown time'}: {e}"
                     )
 
-        return count
+        # Bulk create all samples
+        if samples_to_create:
+            self.data_point_repo.bulk_create(db, samples_to_create)
+
+        return len(samples_to_create)
 
     # -------------------------------------------------------------------------
     # Combined Load (Main Entry Point)

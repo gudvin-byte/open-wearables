@@ -1,94 +1,76 @@
-"""
-Tests for Ultrahuman provider strategy.
+"""Tests for Ultrahuman strategy."""
 
-Tests the UltrahumanStrategy class for provider initialization and component setup.
-"""
-
-from sqlalchemy.orm import Session
-
-from app.services.providers.base_strategy import BaseProviderStrategy
+from app.services.providers.ultrahuman.data_247 import Ultrahuman247Data
+from app.services.providers.ultrahuman.oauth import UltrahumanOAuth
 from app.services.providers.ultrahuman.strategy import UltrahumanStrategy
 
 
 class TestUltrahumanStrategy:
-    """Test suite for UltrahumanStrategy."""
+    """Tests for UltrahumanStrategy class."""
 
-    def test_ultrahuman_strategy_initialization(self, db: Session) -> None:
-        """Should initialize UltrahumanStrategy successfully."""
-        # Act
+    def test_name_is_ultrahuman(self) -> None:
+        """Strategy name should be 'ultrahuman'."""
         strategy = UltrahumanStrategy()
+        assert strategy.name == "ultrahuman"
 
-        # Assert
-        assert isinstance(strategy, BaseProviderStrategy)
-        assert isinstance(strategy, UltrahumanStrategy)
-
-    def test_ultrahuman_strategy_name(self, db: Session) -> None:
-        """Should return correct provider name."""
-        # Arrange
+    def test_api_base_url(self) -> None:
+        """API base URL should be Ultrahuman's API endpoint."""
         strategy = UltrahumanStrategy()
+        assert strategy.api_base_url == "https://partner.ultrahuman.com/api/partners/v1"
 
-        # Act
-        name = strategy.name
-
-        # Assert
-        assert name == "ultrahuman"
-
-    def test_ultrahuman_strategy_api_base_url(self, db: Session) -> None:
-        """Should return correct API base URL."""
-        # Arrange
+    def test_display_name(self) -> None:
+        """Display name should be capitalized provider name."""
         strategy = UltrahumanStrategy()
+        assert strategy.display_name == "Ultrahuman"
 
-        # Act
-        api_base_url = strategy.api_base_url
-
-        # Assert
-        assert api_base_url == "https://partner.ultrahuman.com/api/partners/v1"
-
-    def test_ultrahuman_strategy_display_name(self, db: Session) -> None:
-        """Should return correct display name."""
-        # Arrange
+    def test_has_cloud_api(self) -> None:
+        """Ultrahuman should have cloud API support."""
         strategy = UltrahumanStrategy()
-
-        # Act
-        display_name = strategy.display_name
-
-        # Assert
-        assert display_name == "Ultrahuman"
-
-    def test_ultrahuman_strategy_has_oauth(self, db: Session) -> None:
-        """Should initialize OAuth component."""
-        # Arrange
-        strategy = UltrahumanStrategy()
-
-        # Assert
-        assert strategy.oauth is not None
         assert strategy.has_cloud_api is True
 
-    def test_ultrahuman_strategy_has_data_247(self, db: Session) -> None:
-        """Should initialize data_247 component."""
-        # Arrange
+    def test_icon_url(self) -> None:
+        """Icon URL should point to Ultrahuman SVG icon."""
         strategy = UltrahumanStrategy()
+        assert strategy.icon_url == "/static/provider-icons/ultrahuman.svg"
 
-        # Assert
+    def test_oauth_component_initialized(self) -> None:
+        """OAuth component should be initialized."""
+        strategy = UltrahumanStrategy()
+        assert strategy.oauth is not None
+        assert isinstance(strategy.oauth, UltrahumanOAuth)
+
+    def test_data_247_component_initialized(self) -> None:
+        """Data_247 component should be initialized."""
+        strategy = UltrahumanStrategy()
         assert strategy.data_247 is not None
+        assert isinstance(strategy.data_247, Ultrahuman247Data)
 
-    def test_ultrahuman_strategy_has_repositories(self, db: Session) -> None:
-        """Should initialize all required repositories."""
-        # Arrange
+    def test_oauth_has_correct_provider_name(self) -> None:
+        """OAuth component should have correct provider name."""
         strategy = UltrahumanStrategy()
+        assert strategy.oauth is not None
+        assert strategy.oauth.provider_name == "ultrahuman"
 
-        # Assert
+    def test_oauth_has_correct_api_base_url(self) -> None:
+        """OAuth component should have correct API base URL."""
+        strategy = UltrahumanStrategy()
+        assert strategy.oauth is not None
+        assert strategy.oauth.api_base_url == "https://partner.ultrahuman.com/api/partners/v1"
+
+    def test_data_247_has_correct_provider_name(self) -> None:
+        """Data_247 component should have correct provider name."""
+        strategy = UltrahumanStrategy()
+        assert strategy.data_247 is not None
+        assert strategy.data_247.provider_name == "ultrahuman"
+
+    def test_data_247_has_correct_api_base_url(self) -> None:
+        """Data_247 component should have correct API base URL."""
+        strategy = UltrahumanStrategy()
+        assert strategy.data_247 is not None
+        assert strategy.data_247.api_base_url == "https://partner.ultrahuman.com/api/partners/v1"
+
+    def test_repositories_initialized(self) -> None:
+        """All required repositories should be initialized."""
+        strategy = UltrahumanStrategy()
         assert strategy.user_repo is not None
         assert strategy.connection_repo is not None
-        assert strategy.workout_repo is not None
-
-    def test_ultrahuman_strategy_icon_url(self, db: Session) -> None:
-        """Should return correct icon URL."""
-        # Arrange
-        strategy = UltrahumanStrategy()
-
-        # Act
-        icon_url = strategy.icon_url
-
-        # Assert
-        assert icon_url == "/static/provider-icons/ultrahuman.svg"

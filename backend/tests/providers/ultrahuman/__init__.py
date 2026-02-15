@@ -1,1 +1,1 @@
-"""Tests for Ultrahuman provider."""
+"""Tests for Ultrahuman provider integration."""
