@@ -16,11 +16,38 @@ class ProviderName(str, Enum):
     """Supported data providers."""
 
     APPLE = "apple"
+    SAMSUNG = "samsung"
     GARMIN = "garmin"
     POLAR = "polar"
     SUUNTO = "suunto"
     ULTRAHUMAN = "ultrahuman"
     WHOOP = "whoop"
+    STRAVA = "strava"
+    OURA = "oura"
+    UNKNOWN = "unknown"
+
+    @classmethod
+    def from_source_string(cls, source: str | None) -> "ProviderName":
+        """Infer provider from a source string by checking if provider name appears in it.
+
+        Args:
+            source: Source string (e.g., "apple_health_sdk", "Garmin Connect")
+
+        Returns:
+            Matching ProviderName or UNKNOWN if no match found
+        """
+        if not source:
+            return cls.UNKNOWN
+
+        source_lower = source.lower()
+        # Check each provider (except UNKNOWN) to see if it appears in the source string
+        for provider in cls:
+            if provider == cls.UNKNOWN:
+                continue
+            if provider.value in source_lower:
+                return provider
+
+        return cls.UNKNOWN
 
 
 class ConnectionStatus(str, Enum):
@@ -58,9 +85,9 @@ class UserConnectionCreate(UserConnectionBase):
     model_config = ConfigDict(populate_by_name=True)
 
     id: UUID = Field(default_factory=uuid4)
-    access_token: str
+    access_token: str | None = None  # Optional for SDK-based providers (e.g., Apple)
     refresh_token: str | None = None
-    token_expires_at: datetime
+    token_expires_at: datetime | None = None  # Optional for SDK-based providers
     status: ConnectionStatus = ConnectionStatus.ACTIVE
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

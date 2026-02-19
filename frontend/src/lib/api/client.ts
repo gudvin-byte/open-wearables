@@ -1,6 +1,7 @@
 import { API_CONFIG } from './config';
 import { ApiError } from '../errors/api-error';
 import { getToken, clearSession } from '../auth/session';
+import { ROUTES } from '../constants/routes';
 
 interface RequestOptions extends RequestInit {
   timeout?: number;
@@ -42,11 +43,6 @@ async function fetchWithRetry(
 
     if (error instanceof Error && error.name === 'AbortError') {
       throw ApiError.timeout();
-    }
-
-    if (attempt < retries) {
-      await delay(API_CONFIG.retryDelay * (attempt + 1));
-      return fetchWithRetry(url, options, attempt + 1);
     }
 
     const message = error instanceof Error ? error.message : 'Network error';
@@ -97,7 +93,7 @@ export const apiClient = {
       if (response.status === 401) {
         clearSession();
         if (typeof window !== 'undefined') {
-          window.location.href = '/login';
+          window.location.href = ROUTES.login;
         }
         throw ApiError.fromResponse(response);
       }
@@ -236,7 +232,7 @@ export const apiClient = {
     if (response.status === 401) {
       clearSession();
       if (typeof window !== 'undefined') {
-        window.location.href = '/login';
+        window.location.href = ROUTES.login;
       }
       throw ApiError.fromResponse(response);
     }

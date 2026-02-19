@@ -23,6 +23,9 @@ class ProviderSettingsService:
         result = []
         for provider_enum in ProviderName:
             provider_key = provider_enum.value
+            # Skip providers without active strategies
+            if provider_key in ("unknown", "oura"):
+                continue
             strategy = self.factory.get_provider(provider_key)
 
             # Default enabled = True unless explicitly disabled in DB

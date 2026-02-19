@@ -33,10 +33,8 @@ test:	## Run the tests.
 migrate:  ## Apply all migrations
 	$(DOCKER_EXEC) $(ALEMBIC_CMD) upgrade head
 
-init:  ## Seed sample data
+seed:  ## Seed sample data (test users and activity data)
 	$(DOCKER_EXEC) uv sync --group dev
-	$(DOCKER_EXEC) uv run python scripts/init/seed_admin.py
-	$(DOCKER_EXEC) uv run python scripts/init/seed_series_types.py
 	$(DOCKER_EXEC) uv run python scripts/init/seed_activity_data.py
 
 create_migration:  ## Create a new migration. Use 'make create_migration m="Description of the change"'
@@ -48,3 +46,6 @@ create_migration:  ## Create a new migration. Use 'make create_migration m="Desc
 
 downgrade:  ## Revert the last migration
 	$(DOCKER_EXEC) $(ALEMBIC_CMD) downgrade -1
+
+reset_db:  ## Truncate all tables in the database (WARNING: deletes all data)
+	$(DOCKER_EXEC) uv run python scripts/reset_database.py

@@ -19,6 +19,7 @@ from app.schemas.invitation import (
 )
 from app.services.developer_service import developer_service
 from app.utils.security import get_password_hash
+from app.utils.structured_logging import log_structured
 
 
 class InvitationService:
@@ -90,6 +91,7 @@ class InvitationService:
             invited_by_id=invited_by.id,
         )
         invitation = self.crud.create(db_session, invitation_data)
+        assert invitation is not None
 
         # Queue invitation email for async delivery (Celery task will update status to SENT on success)
         self._send_invitation_email_async(invitation, invited_by.email)
@@ -149,7 +151,13 @@ class InvitationService:
         try:
             developer = self.crud.accept_with_developer(db_session, invitation, developer)
         except Exception as e:
-            self.logger.error(f"Failed to accept invitation: {e}")
+            log_structured(
+                self.logger,
+                "error",
+                f"Failed to accept invitation: {e}",
+                provider="invitation",
+                task="accept_invitation",
+            )
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to create developer account",

@@ -20,7 +20,7 @@ Open-source platform that unifies wearable device data from multiple providers a
 
 ## What It Does
 
-Open Wearables provides a unified API and developer portal to connect and sync data from multiple wearable devices and fitness platforms. Instead of implementing separate integrations for Garmin, Fitbit, Oura, Whoop, Strava, and Apple Health, you can use a single platform to access normalized health data and build intelligent health insights through AI-powered automations.
+Open Wearables provides a unified API and developer portal to connect and sync data from multiple wearable devices and fitness platforms. Instead of implementing separate integrations for each provider (e.g., Garmin, Whoop, Apple Health), you can use a single platform to access normalized health data and build intelligent health insights through AI-powered automations.
 
 <div align="center">
 <img width="597" height="449" alt="image" src="https://github.com/user-attachments/assets/b626405d-99a3-4ff7-b044-442483a3edea" />
@@ -42,7 +42,7 @@ Open Wearables provides a unified API and developer portal to connect and sync d
 **The Problem It Solves:**
 
 Building a health app that supports multiple wearables typically requires:
-- Significant development effort per provider (Garmin, Fitbit, Oura, etc.) to implement OAuth flows, data mapping, and sync logic
+- Significant development effort per provider (Garmin, Whoop, Apple Health, etc.) to implement OAuth flows, data mapping, and sync logic
 - Managing different OAuth flows and APIs for each service
 - Handling various data formats and units
 - Maintaining multiple SDKs and dealing with API changes
@@ -91,21 +91,22 @@ Get Open Wearables up and running in minutes.
    
    For local development setup without Docker take a look at [docs](https://docs.openwearables.io/quickstart#local-development-setup)
 
-4. **Seed sample data** (optional but recommended):
-   If you're using Docker, seed the database with sample data including an admin account:
-   ```bash
-   make init
-   ```
-   
-   This will create:
-   - An admin user account (`admin@admin.com` / `secret123`)
-   - 10 test users
-   - Sample activity data for test users
+4. **Log in to the developer portal:**
 
-
-5. **Access the developer portal:**
+   An admin account is automatically created on startup using the `ADMIN_EMAIL` and `ADMIN_PASSWORD` environment variables (defaults: `admin@admin.com` / `secret123`).
 
    Open http://localhost:3000 to access the developer portal and create API keys.
+
+5. **Seed sample data** (optional):
+   If you want test users and sample activity data:
+   ```bash
+   make seed
+   ```
+
+   This will create:
+   - Test users
+   - Sample activity data for test users
+
 
 6. **View API documentation:**
 

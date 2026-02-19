@@ -59,6 +59,10 @@ class Settings(BaseSettings):
     redis_password: SecretStr | None = None
     redis_username: str | None = None  # Redis 6.0+ ACL
 
+    # ADMIN ACCOUNT SEED
+    admin_email: str = "admin@admin.com"
+    admin_password: SecretStr = SecretStr("secret123")
+
     # Time to live for sleep state in Redis
     redis_sleep_ttl_seconds: int = 24 * 3600  # 24 hours
 
@@ -99,6 +103,14 @@ class Settings(BaseSettings):
     ultrahuman_client_secret: SecretStr | None = None
     ultrahuman_redirect_uri: str = "http://localhost:8000/api/v1/oauth/ultrahuman/callback"
     ultrahuman_default_scope: str = "ring_data cgm_data profile"
+    # STRAVA OAUTH SETTINGS
+    strava_client_id: str | None = None
+    strava_client_secret: SecretStr | None = None
+    strava_redirect_uri: str = "http://localhost:8000/api/v1/oauth/strava/callback"
+    strava_default_scope: str = "activity:read_all,profile:read_all"
+    strava_webhook_verify_token: str = "open-wearables-strava-verify"
+    # Strava API max is 200 activities per page
+    strava_events_per_page: int = 200
 
     # EMAIL SETTINGS (Resend)
     resend_api_key: SecretStr | None = None
@@ -108,10 +120,13 @@ class Settings(BaseSettings):
     invitation_expire_days: int = 7
     email_max_retries: int = 5
 
+    # SDK INVITATION CODE SETTINGS
+    user_invitation_code_expire_days: int = 7
+
     # AWS SETTINGS
     aws_bucket_name: str | None = None
     aws_access_key_id: str | None = None
-    aws_secret_access_key: str | None = None
+    aws_secret_access_key: SecretStr | None = None
     aws_region: str = "eu-north-1"
     sqs_queue_url: str | None = None
 
