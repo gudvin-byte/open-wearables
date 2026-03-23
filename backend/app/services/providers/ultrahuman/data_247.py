@@ -8,13 +8,13 @@ from uuid import UUID, uuid4
 from fastapi import HTTPException
 
 from app.database import DbSession
-from app.models import DataPointSeries, EventRecord, ExternalDeviceMapping
+from app.models import DataPointSeries, EventRecord
 from app.repositories import EventRecordRepository, UserConnectionRepository
 from app.repositories.data_point_series_repository import DataPointSeriesRepository
-from app.repositories.external_mapping_repository import ExternalMappingRepository
-from app.schemas import EventRecordCreate, TimeSeriesSampleCreate
-from app.schemas.event_record_detail import EventRecordDetailCreate
-from app.schemas.series_types import SeriesType
+from app.schemas.enums.series_types import SeriesType
+from app.schemas.model_crud.activities.data_point_series import TimeSeriesSampleCreate
+from app.schemas.model_crud.activities.event_record import EventRecordCreate
+from app.schemas.model_crud.activities.event_record_detail import EventRecordDetailCreate
 from app.services.event_record_service import event_record_service
 from app.services.providers.api_client import make_authenticated_request
 from app.services.providers.templates.base_247_data import Base247DataTemplate
@@ -32,7 +32,6 @@ class Ultrahuman247Data(Base247DataTemplate):
     ):
         super().__init__(provider_name, api_base_url, oauth)
         self.event_record_repo = EventRecordRepository(EventRecord)
-        self.mapping_repo = ExternalMappingRepository(ExternalDeviceMapping)
         self.connection_repo = UserConnectionRepository()
         self.data_point_repo = DataPointSeriesRepository(DataPointSeries)
 
@@ -189,13 +188,11 @@ class Ultrahuman247Data(Base247DataTemplate):
             category="sleep",
             type="sleep_session",
             source_name="Ultrahuman Ring Air",
-            device_id=None,
-            external_device_mapping_id=None,
             duration_seconds=normalized_sleep.get("duration_seconds"),
             start_datetime=start_dt,
             end_datetime=end_dt,
             external_id=f"sleep-{normalized_sleep.get('ultrahuman_date')}",
-            provider_name=self.provider_name,
+            provider=self.provider_name,
             user_id=user_id,
         )
 
@@ -398,11 +395,10 @@ class Ultrahuman247Data(Base247DataTemplate):
                     ts_sample = TimeSeriesSampleCreate(
                         id=uuid4(),
                         user_id=user_id,
-                        provider_name=self.provider_name,
+                        provider=self.provider_name,
                         recorded_at=recorded_at,
                         value=Decimal(str(sample.get("value"))),
                         series_type=series_type,
-                        external_device_mapping_id=None,
                     )
 
                     self.data_point_repo.create(db, ts_sample)

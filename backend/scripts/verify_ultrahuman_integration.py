@@ -20,7 +20,7 @@ from datetime import datetime, timedelta, timezone
 sys.path.insert(0, os.path.join(os.getcwd()))
 
 from app.database import SessionLocal
-from app.models import DataPointSeries, EventRecord, ExternalDeviceMapping, SleepDetails, UserConnection
+from app.models import DataPointSeries, DataSource, EventRecord, SleepDetails, UserConnection
 from app.services.providers.factory import ProviderFactory
 
 
@@ -172,10 +172,10 @@ def check_database_schema() -> bool:
         else:
             print_success("data_point_series table exists")
 
-        if db.query(ExternalDeviceMapping).first() is None:
-            print_warning("external_device_mapping table is empty")
+        if db.query(DataSource).first() is None:
+            print_warning("data_source table is empty")
         else:
-            print_success("external_device_mapping table exists")
+            print_success("data_source table exists")
 
         return True
 
@@ -260,9 +260,9 @@ def verify_sleep_records() -> bool:
         for conn in connections:
             records = (
                 db.query(EventRecord)
-                .join(ExternalDeviceMapping)
+                .join(DataSource)
                 .filter(
-                    ExternalDeviceMapping.user_id == conn.user_id,
+                    DataSource.user_id == conn.user_id,
                     EventRecord.category == "sleep",
                 )
                 .order_by(EventRecord.start_datetime.desc())
@@ -328,7 +328,7 @@ def verify_activity_samples() -> bool:
             return False
 
         for conn in connections:
-            samples = db.query(DataPointSeries).filter(DataPointSeries.external_device_mapping_id.isnot(None)).all()
+            samples = db.query(DataPointSeries).filter(DataPointSeries.data_source_id.isnot(None)).all()
 
             if not samples:
                 print_warning(f"No activity samples found for user {conn.user_id}")

@@ -66,10 +66,11 @@ class TestUltrahumanOAuthConfiguration:
 
     def test_ultrahuman_oauth_uses_body_auth(self, db: Session) -> None:
         """Test Ultrahuman OAuth uses BODY Authentication method."""
+        from app.schemas.oauth import AuthenticationMethod
+
         from app.models import User
         from app.repositories.user_connection_repository import UserConnectionRepository
         from app.repositories.user_repository import UserRepository
-        from app.schemas.oauth import AuthenticationMethod
 
         user_repo = UserRepository(User)
         connection_repo = UserConnectionRepository()

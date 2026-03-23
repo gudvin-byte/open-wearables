@@ -7,8 +7,8 @@ import httpx
 from app.config import settings
 from app.repositories.user_connection_repository import UserConnectionRepository
 from app.repositories.user_repository import UserRepository
-from app.schemas import (
-    AuthenticationMethod,
+from app.schemas.auth import AuthenticationMethod
+from app.schemas.model_crud.credentials import (
     OAuthTokenResponse,
     ProviderCredentials,
     ProviderEndpoints,
