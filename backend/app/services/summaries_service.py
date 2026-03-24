@@ -7,6 +7,10 @@ from uuid import UUID
 from app.database import DbSession
 from app.models import DataPointSeries, EventRecord, ProviderPriority, User
 from app.repositories import EventRecordRepository, ProviderPriorityRepository
+from app.repositories.archival_repository import (
+    ArchivalSettingRepository,
+    DataPointSeriesArchiveRepository,
+)
 from app.repositories.data_point_series_repository import (
     ActiveMinutesResult,
     DataPointSeriesRepository,
@@ -14,11 +18,13 @@ from app.repositories.data_point_series_repository import (
 )
 from app.repositories.device_type_priority_repository import DeviceTypePriorityRepository
 from app.repositories.user_repository import UserRepository
-from app.schemas.common_types import PaginatedResponse, Pagination, SourceMetadata, TimeseriesMetadata
-from app.schemas.device_type import infer_device_type_from_model
-from app.schemas.oauth import ProviderName
-from app.schemas.series_types import SeriesType
-from app.schemas.summaries import (
+from app.schemas.enums import (
+    ProviderName,
+    SeriesType,
+    get_series_type_id,
+    infer_device_type_from_model,
+)
+from app.schemas.responses.activity import (
     ActivitySummary,
     BloodPressure,
     BodyAveraged,
@@ -30,12 +36,19 @@ from app.schemas.summaries import (
     SleepStagesSummary,
     SleepSummary,
 )
+from app.schemas.utils import (
+    PaginatedResponse,
+    Pagination,
+    SourceMetadata,
+    TimeseriesMetadata,
+)
 from app.utils.exceptions import handle_exceptions
 from app.utils.pagination import (
     decode_activity_cursor,
     encode_activity_cursor,
     encode_cursor,
 )
+from app.utils.structured_logging import log_structured
 
 # Series types needed for sleep physiological metrics
 # TODO: Add HRV, respiratory rate, and SpO2 when ready
@@ -82,14 +95,16 @@ class SummariesService:
         self.event_record_repo = EventRecordRepository(EventRecord)
         self.data_point_repo = DataPointSeriesRepository(DataPointSeries)
         self.user_repo = UserRepository(User)
+        self.archival_settings_repo = ArchivalSettingRepository()
+        self.archive_repo = DataPointSeriesArchiveRepository()
 
     def _filter_by_priority(
         self,
         db_session: DbSession,
         user_id: UUID,
-        results: list[dict] | list,  # type: ignore[type-arg]
+        results: list[dict] | list,
         date_key: str = "activity_date",
-    ) -> list[dict] | list:  # type: ignore[type-arg]
+    ) -> list[dict] | list:
         """Filter results to highest priority source per date.
 
         Args:
@@ -177,8 +192,62 @@ class SummariesService:
             "vigorous_max": int(max_hr * HR_ZONE_VIGOROUS[1]),
         }
 
+    def _merge_archive_activity(
+        self,
+        db_session: DbSession,
+        user_id: UUID,
+        start_date: datetime,
+        end_date: datetime,
+        live_results: list,  # noqa: ANN401  — accepts ActivityAggregateResult | dict
+    ) -> list:
+        """Merge archived daily aggregates into live results.
+
+        If archival is enabled, some days may only have data in the archive table.
+        This method queries the archive and merges rows, preferring live data when
+        both exist for the same (date, source, device_model) key.
+        """
+        try:
+            self.archival_settings_repo.get(db_session)
+        except Exception:
+            return live_results
+
+        series_type_ids = [
+            get_series_type_id(t)
+            for t in [
+                SeriesType.steps,
+                SeriesType.energy,
+                SeriesType.basal_energy,
+                SeriesType.heart_rate,
+                SeriesType.distance_walking_running,
+                SeriesType.flights_climbed,
+            ]
+        ]
+
+        archive_results = self.archive_repo.get_daily_activity_aggregates_from_archive(
+            db_session, user_id, start_date, end_date, series_type_ids
+        )
+
+        if not archive_results:
+            return live_results
+
+        # Build lookup from live data keyed on (date, source, device_model)
+        live_keys: set[tuple] = set()
+        for r in live_results:
+            live_keys.add((r["activity_date"], r["source"], r.get("device_model")))
+
+        # Add archive rows that are NOT already covered by live data
+        merged = list(live_results)
+        for ar in archive_results:
+            key = (ar["activity_date"], ar["source"], ar.get("device_model"))
+            if key not in live_keys:
+                merged.append(ar)
+
+        # Sort by date
+        merged.sort(key=lambda r: r["activity_date"])
+        return merged
+
     @handle_exceptions
-    async def get_sleep_summaries(
+    def get_sleep_summaries(
         self,
         db_session: DbSession,
         user_id: UUID,
@@ -256,7 +325,13 @@ class SummariesService:
                     hr_avg = physio_averages.get(SeriesType.heart_rate)
                     avg_hr = int(round(hr_avg)) if hr_avg is not None else None
                 except Exception as e:
-                    self.logger.warning(f"Failed to fetch heart rate metrics for sleep: {e}")
+                    log_structured(
+                        self.logger,
+                        "warning",
+                        f"Failed to fetch heart rate metrics for sleep: {e}",
+                        sleep_start=sleep_start,
+                        sleep_end=sleep_end,
+                    )
 
             summary = SleepSummary(
                 date=result["sleep_date"],
@@ -292,7 +367,7 @@ class SummariesService:
         )
 
     @handle_exceptions
-    async def get_activity_summaries(
+    def get_activity_summaries(
         self,
         db_session: DbSession,
         user_id: UUID,
@@ -300,6 +375,7 @@ class SummariesService:
         end_date: datetime,
         cursor: str | None,
         limit: int,
+        sort_order: str = "asc",
     ) -> PaginatedResponse[ActivitySummary]:
         """Get daily activity summaries aggregated by date, provider, and device.
 
@@ -316,8 +392,11 @@ class SummariesService:
         """
         self.logger.debug(f"Fetching activity summaries for user {user_id} from {start_date} to {end_date}")
 
-        # Get aggregated data from time-series repository
+        # Get aggregated data from time-series repository (live data)
         results = self.data_point_repo.get_daily_activity_aggregates(db_session, user_id, start_date, end_date)
+
+        # Merge archived data when archival is enabled
+        results = self._merge_archive_activity(db_session, user_id, start_date, end_date, results)
 
         # Filter by priority to get best source per date
         results = self._filter_by_priority(db_session, user_id, results, date_key="activity_date")
@@ -365,6 +444,10 @@ class SummariesService:
             key = (im["activity_date"], im["source"], im.get("device_model"))
             intensity_lookup[key] = im
 
+        # Sort results based on sort_order (default ascending from DB)
+        if sort_order == "desc":
+            results = list(reversed(results))
+
         # Apply cursor-based pagination using compound key (date, provider, device)
         # This ensures we don't skip records when multiple providers exist for the same date
         if cursor:
@@ -372,21 +455,37 @@ class SummariesService:
             cursor_key = (cursor_date, cursor_provider, cursor_device or "")
 
             if direction == "prev":
-                # Backward pagination: get items BEFORE cursor key
-                results = [
-                    r
-                    for r in results
-                    if (r["activity_date"], r["source"] or "", r.get("device_model") or "") < cursor_key
-                ]
+                # Backward pagination: get items BEFORE cursor key (in current sort order)
+                if sort_order == "desc":
+                    # In desc order, "before" means items with GREATER keys
+                    results = [
+                        r
+                        for r in results
+                        if (r["activity_date"], r["source"] or "", r.get("device_model") or "") > cursor_key
+                    ]
+                else:
+                    results = [
+                        r
+                        for r in results
+                        if (r["activity_date"], r["source"] or "", r.get("device_model") or "") < cursor_key
+                    ]
                 # Reverse to get correct order for backward pagination
                 results = list(reversed(results))
             else:
-                # Forward pagination: get items AFTER cursor key
-                results = [
-                    r
-                    for r in results
-                    if (r["activity_date"], r["source"] or "", r.get("device_model") or "") > cursor_key
-                ]
+                # Forward pagination: get items AFTER cursor key (in current sort order)
+                if sort_order == "desc":
+                    # In desc order, "after" means items with SMALLER keys
+                    results = [
+                        r
+                        for r in results
+                        if (r["activity_date"], r["source"] or "", r.get("device_model") or "") < cursor_key
+                    ]
+                else:
+                    results = [
+                        r
+                        for r in results
+                        if (r["activity_date"], r["source"] or "", r.get("device_model") or "") > cursor_key
+                    ]
 
         # Check for more data
         has_more = len(results) > limit
@@ -524,7 +623,7 @@ class SummariesService:
         return round(bmi, 1)
 
     @handle_exceptions
-    async def get_body_summary(
+    def get_body_summary(
         self,
         db_session: DbSession,
         user_id: UUID,
@@ -633,10 +732,12 @@ class SummariesService:
         # --- LATEST: Get recent point-in-time readings ---
         latest_window_start = now - timedelta(hours=latest_window_hours)
 
-        temp_reading = self.data_point_repo.get_latest_reading_within_window(
+        body_temp_reading = self.data_point_repo.get_latest_reading_within_window(
             db_session, user_id, SeriesType.body_temperature, latest_window_start, now
         )
-
+        skin_temp_reading = self.data_point_repo.get_latest_reading_within_window(
+            db_session, user_id, SeriesType.skin_temperature, latest_window_start, now
+        )
         # Get blood pressure readings within the window
         bp_systolic_reading = self.data_point_repo.get_latest_reading_within_window(
             db_session, user_id, SeriesType.blood_pressure_systolic, latest_window_start, now
@@ -644,6 +745,10 @@ class SummariesService:
         bp_diastolic_reading = self.data_point_repo.get_latest_reading_within_window(
             db_session, user_id, SeriesType.blood_pressure_diastolic, latest_window_start, now
         )
+
+        # ignore provider and device id
+        body_temp_celsius, body_temp_measured_at, _, _ = body_temp_reading or (None, None, None, None)
+        skin_temp_celsius, skin_temp_measured_at, _, _ = skin_temp_reading or (None, None, None, None)
 
         # Blood pressure readings are only meaningful as a pair recorded at the same time.
         # Validate that both readings exist and their timestamps match within tolerance.
@@ -667,20 +772,22 @@ class SummariesService:
                 )
                 bp_measured_at = max(bp_systolic_reading[1], bp_diastolic_reading[1])
 
-        body_latest = BodyLatest(
-            body_temperature_celsius=temp_reading[0] if temp_reading else None,
-            temperature_measured_at=temp_reading[1] if temp_reading else None,
-            blood_pressure=blood_pressure,
-            blood_pressure_measured_at=bp_measured_at,
-        )
-
         # Check if we have any data at all
         has_slow_changing = any([weight_kg, height_cm, body_fat_pct, muscle_mass_kg])
         has_averaged = any([resting_hr, avg_hrv])
-        has_latest = temp_reading is not None or blood_pressure is not None
+        has_latest = any([body_temp_celsius, skin_temp_celsius, blood_pressure])
 
         if not has_slow_changing and not has_averaged and not has_latest:
             return None
+
+        body_latest = BodyLatest(
+            body_temperature_celsius=body_temp_celsius,
+            body_temperature_measured_at=body_temp_measured_at,
+            skin_temperature_celsius=skin_temp_celsius,
+            skin_temperature_measured_at=skin_temp_measured_at,
+            blood_pressure=blood_pressure,
+            blood_pressure_measured_at=bp_measured_at,
+        )
 
         return BodySummary(
             source=SourceMetadata(provider=provider, device=device_id),

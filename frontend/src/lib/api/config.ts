@@ -13,11 +13,14 @@ export const API_ENDPOINTS = {
   me: '/api/v1/auth/me',
   forgotPassword: '/api/v1/auth/forgot-password',
   resetPassword: '/api/v1/auth/reset-password',
+  changePassword: '/api/v1/auth/change-password',
 
   // User endpoints
   users: '/api/v1/users',
   userDetail: (id: string) => `/api/v1/users/${id}`,
   userConnections: (userId: string) => `/api/v1/users/${userId}/connections`,
+  userConnectionDisconnect: (userId: string, provider: string) =>
+    `/api/v1/users/${userId}/connections/${provider}`,
   userWorkouts: (userId: string) => `/api/v1/users/${userId}/events/workouts`,
   userAppleXmlImport: (userId: string) =>
     `/api/v1/users/${userId}/import/apple/xml/direct`,

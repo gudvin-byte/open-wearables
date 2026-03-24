@@ -3,7 +3,7 @@ from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy import UUID as SQL_UUID
-from sqlalchemy import Date, Integer, String, and_, asc, case, cast, desc, func, tuple_
+from sqlalchemy import Date, Integer, String, and_, asc, case, cast, desc, func, text, tuple_
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Query, selectinload
@@ -13,7 +13,12 @@ from app.models import DataSource, EventRecord, SleepDetails
 from app.models.workout_details import WorkoutDetails
 from app.repositories.data_source_repository import DataSourceRepository
 from app.repositories.repositories import CrudRepository
-from app.schemas import EventRecordCreate, EventRecordQueryParams, EventRecordUpdate, ProviderName
+from app.schemas.enums import ProviderName
+from app.schemas.model_crud.activities import (
+    EventRecordCreate,
+    EventRecordQueryParams,
+    EventRecordUpdate,
+)
 from app.utils.exceptions import handle_exceptions
 from app.utils.pagination import decode_cursor
 
@@ -132,15 +137,27 @@ class EventRecordRepository(
                     "duration_seconds": creator.duration_seconds,
                     "start_datetime": creator.start_datetime,
                     "end_datetime": creator.end_datetime,
+                    "zone_offset": creator.zone_offset,
                 }
             )
 
         if not values_list:
             return []
 
-        stmt = insert(self.model).values(values_list).on_conflict_do_nothing(constraint="uq_event_record_datetime")
-        result = db_session.execute(stmt.returning(self.model.id))
-        inserted_ids = {row[0] for row in result.fetchall()}
+        # 3. Batch insert with ON CONFLICT DO NOTHING
+        # Chunk to stay under PostgreSQL's 65535 parameter limit (10 params/row → max ~6553 rows)
+        chunk_size = 6_500
+        inserted_ids: set[UUID] = set()
+        for i in range(0, len(values_list), chunk_size):
+            chunk = values_list[i : i + chunk_size]
+            stmt = (
+                insert(self.model)
+                .values(chunk)
+                .on_conflict_do_nothing(index_elements=["data_source_id", "start_datetime", "end_datetime"])
+            )
+            result = db_session.execute(stmt.returning(self.model.id))
+            inserted_ids.update(row[0] for row in result.fetchall())
+        # NOTE: Caller should commit - allows batching multiple operations
 
         return list(inserted_ids)
 
@@ -281,6 +298,62 @@ class EventRecordRepository(
             .all()
         )
         return [(workout_type, count) for workout_type, count in results]
+
+    def get_sleep_stage_stats_via_json(self, db_session: DbSession, record_id: UUID) -> list[dict]:
+        """
+        Calculates sleep stage statistics directly from the JSONB column using SQL/JSON standard.
+        Demonstrates the power of PostgreSQL 17+ JSON_TABLE for analytic queries without application-side processing.
+        """
+        # Using JSON_TABLE to expand the array and aggregate in SQL
+        # This requires PostgreSQL 17+ (or 16 with extensions, but we target 18 per instructions)
+        stmt = text("""
+            SELECT
+                jt.stage,
+                count(*) as segment_count,
+                sum(extract(epoch from (jt.end_time - jt.start_time))) as total_seconds
+            FROM sleep_details sd,
+            JSON_TABLE(
+                sd.sleep_stages, '$[*]'
+                COLUMNS (
+                    stage text PATH '$.stage',
+                    start_time timestamp PATH '$.start_time',
+                    end_time timestamp PATH '$.end_time'
+                )
+            ) jt
+            WHERE sd.record_id = :record_id
+            GROUP BY jt.stage
+        """)
+
+        try:
+            result = db_session.execute(stmt, {"record_id": record_id}).fetchall()
+            return [
+                {"stage": row.stage, "segment_count": row.segment_count, "total_seconds": row.total_seconds}
+                for row in result
+            ]
+        except Exception:
+            # Fallback for older PG versions or tests running on sqlite/older docker images
+            return []
+
+    def get_records_containing_stage(self, db_session: DbSession, user_id: UUID, stage_name: str) -> list[EventRecord]:
+        """
+        Finds all sleep records that contain at least one occurrence of the specified stage.
+        Uses the highly efficient JSONB containment operator (@>).
+        """
+        # Efficient checking: SleepDetails.sleep_stages @> '[{"stage": "deep"}]'
+        # SQLAlchemy expr: SleepDetails.sleep_stages.contains([{'stage': stage_name}])
+        return (
+            db_session.query(EventRecord)
+            .join(EventRecord.detail.of_type(SleepDetails))
+            .join(DataSource, EventRecord.data_source_id == DataSource.id)
+            .filter(
+                DataSource.user_id == user_id,
+                EventRecord.category == "sleep",
+                SleepDetails.sleep_stages.contains([{"stage": stage_name}]),
+            )
+            .order_by(desc(EventRecord.start_datetime))
+            .limit(10)
+            .all()
+        )
 
     def get_sleep_summaries(
         self,

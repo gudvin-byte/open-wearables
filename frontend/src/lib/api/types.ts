@@ -144,6 +144,12 @@ export interface ResetPasswordRequest {
   password: string;
 }
 
+export interface ChangePasswordRequest {
+  current_password: string;
+  new_password: string;
+  confirm_password: string;
+}
+
 export interface CountWithGrowth {
   count: number;
   weekly_growth: number;
@@ -213,14 +219,22 @@ export interface SleepStagesSummary {
   rem_minutes: number | null;
 }
 
+export interface SleepStage {
+  stage: 'in_bed' | 'sleeping' | 'light' | 'deep' | 'rem' | 'awake' | 'unknown';
+  start_time: string;
+  end_time: string;
+  duration_seconds?: number;
+}
+
 export interface SleepSession {
   id: string;
   start_time: string;
   end_time: string;
-  source: DataSource;
+  source: SourceMetadata;
   duration_seconds: number;
   efficiency_percent: number | null;
   stages: SleepStagesSummary | null;
+  sleep_stage_intervals: SleepStage[] | null;
   is_nap: boolean;
 }
 
@@ -289,7 +303,9 @@ export interface BodyAveraged {
  */
 export interface BodyLatest {
   body_temperature_celsius: number | null;
-  temperature_measured_at: string | null;
+  body_temperature_measured_at: string | null;
+  skin_temperature_celsius: number | null;
+  skin_temperature_measured_at: string | null;
   blood_pressure: BloodPressure | null;
   blood_pressure_measured_at: string | null;
 }
@@ -560,21 +576,43 @@ export interface InvitationAccept {
   password: string;
 }
 
-// Garmin Backfill Status (sequential: 5 data types × 30 days)
-export interface GarminBackfillStatus {
-  in_progress: boolean;
-  days_completed: number;
-  current_data_type_index: number;
-  current_data_type: string; // "sleeps" | "dailies" | "epochs" | "bodyComps" | "hrv"
-  current_end_date: string | null;
-  target_days: number;
-}
-
 // Sync Response (returned by provider sync endpoint)
 export interface SyncResponse {
   success: boolean;
   async: boolean;
   task_id: string;
   message: string;
-  backfill_status?: GarminBackfillStatus;
+}
+
+// Garmin Backfill Types (webhook-based, multi-window sequential sync)
+export interface BackfillWindowStatus {
+  [dataType: string]: 'done' | 'pending' | 'timed_out' | 'failed';
+}
+
+export interface BackfillTypeSummary {
+  done: number;
+  timed_out: number;
+  failed: number;
+}
+
+export interface GarminBackfillStatus {
+  overall_status:
+    | 'pending'
+    | 'in_progress'
+    | 'complete'
+    | 'cancelled'
+    | 'retry_in_progress'
+    | 'permanently_failed';
+  current_window: number;
+  total_windows: number;
+  windows: Record<string, BackfillWindowStatus>;
+  summary: Record<string, BackfillTypeSummary>;
+  in_progress: boolean;
+  // Phase 3: retry and GC state
+  retry_phase: boolean;
+  retry_type: string | null;
+  retry_window: number | null;
+  attempt_count: number;
+  max_attempts: number;
+  permanently_failed: boolean;
 }

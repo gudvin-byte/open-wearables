@@ -10,22 +10,23 @@ from app.models import (
     WorkoutDetails,
 )
 from app.repositories import DataSourceRepository, EventRecordDetailRepository, EventRecordRepository
-from app.schemas import (
+from app.schemas.enums import WORKOUTS_WITH_PACE
+from app.schemas.model_crud.activities import (
     EventRecordCreate,
     EventRecordDetailCreate,
     EventRecordQueryParams,
     EventRecordResponse,
     EventRecordUpdate,
 )
-from app.schemas.common_types import PaginatedResponse, Pagination, TimeseriesMetadata
-from app.schemas.common_types import SourceMetadata as DataSourceSchema
-from app.schemas.events import (
-    SleepSession,
-    Workout,
-    WorkoutDetailed,
+from app.schemas.responses.activity import SleepSession, SleepStagesSummary, Workout, WorkoutDetailed
+from app.schemas.utils import (
+    PaginatedResponse,
+    Pagination,
+    TimeseriesMetadata,
 )
-from app.schemas.summaries import SleepStagesSummary
-from app.schemas.workout_types import WORKOUTS_WITH_PACE
+from app.schemas.utils import (
+    SourceMetadata as DataSourceSchema,
+)
 from app.services.services import AppService
 from app.utils.exceptions import handle_exceptions
 from app.utils.pagination import encode_cursor
@@ -55,6 +56,7 @@ class EventRecordService(
             duration_seconds=record.duration_seconds,
             start_datetime=record.start_datetime,
             end_datetime=record.end_datetime,
+            zone_offset=record.zone_offset,
             data_source_id=record.data_source_id,
             user_id=data_source.user_id,
             source=data_source.source,
@@ -86,7 +88,7 @@ class EventRecordService(
         self.event_record_detail_repo.bulk_create(db_session, details, detail_type=detail_type)  # type: ignore[arg-type]
 
     @handle_exceptions
-    async def _get_records_with_filters(
+    def _get_records_with_filters(
         self,
         db_session: DbSession,
         query_params: EventRecordQueryParams,
@@ -101,13 +103,13 @@ class EventRecordService(
         return records, total_count
 
     @handle_exceptions
-    async def get_records_response(
+    def get_records_response(
         self,
         db_session: DbSession,
         query_params: EventRecordQueryParams,
         user_id: str,
     ) -> list[EventRecordResponse]:
-        records, _ = await self._get_records_with_filters(db_session, query_params, user_id)
+        records, _ = self._get_records_with_filters(db_session, query_params, user_id)
 
         return [self._build_response(record, data_source) for record, data_source in records]
 
@@ -122,14 +124,14 @@ class EventRecordService(
         )
 
     @handle_exceptions
-    async def get_workouts(
+    def get_workouts(
         self,
         db_session: DbSession,
         user_id: UUID,
         params: EventRecordQueryParams,
     ) -> PaginatedResponse[Workout]:
         params.category = "workout"
-        records, total_count = await self._get_records_with_filters(db_session, params, str(user_id))
+        records, total_count = self._get_records_with_filters(db_session, params, str(user_id))
         # Ensure total_count is always an int (not None)
         total_count = total_count if total_count is not None else 0
 
@@ -177,6 +179,7 @@ class EventRecordService(
                 name=None,  # Not in EventRecord currently
                 start_time=record.start_datetime,
                 end_time=record.end_datetime,
+                zone_offset=record.zone_offset,
                 duration_seconds=record.duration_seconds,
                 source=self._map_source(data_source),
                 calories_kcal=float(details.energy_burned) if details and details.energy_burned else None,
@@ -206,7 +209,7 @@ class EventRecordService(
         )
 
     @handle_exceptions
-    async def get_workout_detailed(
+    def get_workout_detailed(
         self,
         db_session: DbSession,
         user_id: UUID,
@@ -240,6 +243,7 @@ class EventRecordService(
             name=None,
             start_time=record.start_datetime,
             end_time=record.end_datetime,
+            zone_offset=record.zone_offset,
             duration_seconds=record.duration_seconds,
             source=self._map_source(data_source),
             calories_kcal=float(details.energy_burned) if details and details.energy_burned else None,
@@ -254,14 +258,14 @@ class EventRecordService(
         )
 
     @handle_exceptions
-    async def get_sleep_sessions(
+    def get_sleep_sessions(
         self,
         db_session: DbSession,
         user_id: UUID,
         params: EventRecordQueryParams,
     ) -> PaginatedResponse[SleepSession]:
         params.category = "sleep"
-        records, total_count = await self._get_records_with_filters(db_session, params, str(user_id))
+        records, total_count = self._get_records_with_filters(db_session, params, str(user_id))
         # Ensure total_count is always an int (not None)
         total_count = total_count if total_count is not None else 0
 
@@ -307,12 +311,14 @@ class EventRecordService(
                 id=record.id,
                 start_time=record.start_datetime,
                 end_time=record.end_datetime,
+                zone_offset=record.zone_offset,
                 source=self._map_source(data_source),
                 duration_seconds=record.duration_seconds or 0,
                 efficiency_percent=float(details.sleep_efficiency_score)
                 if details and details.sleep_efficiency_score
                 else None,
                 is_nap=details.is_nap if (details and details.is_nap is not None) else False,
+                sleep_stage_intervals=details.sleep_stages if details else None,
                 stages=SleepStagesSummary(
                     deep_minutes=details.sleep_deep_minutes or 0 if details else 0,
                     light_minutes=details.sleep_light_minutes or 0 if details else 0,

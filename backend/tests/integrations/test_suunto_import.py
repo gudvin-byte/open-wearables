@@ -17,7 +17,7 @@ import pytest
 from jose import jwt
 from sqlalchemy.orm import Session
 
-from app.schemas.oauth import ConnectionStatus
+from app.schemas.auth import ConnectionStatus
 from app.services.providers.suunto.strategy import SuuntoStrategy
 from app.services.providers.suunto.workouts import SuuntoWorkouts
 from tests.factories import UserConnectionFactory, UserFactory
@@ -120,16 +120,20 @@ class TestSuuntoImport:
 
         # Mock Redis state
         assert suunto_strategy.oauth is not None
-        with patch.object(suunto_strategy.oauth.redis_client, "get") as mock_redis_get:
-            state_data = {
-                "user_id": str(user.id),
-                "provider": "suunto",
-                "redirect_uri": None,
-            }
-            import json
 
-            mock_redis_get.return_value = json.dumps(state_data)
+        state_data = {
+            "user_id": str(user.id),
+            "provider": "suunto",
+            "redirect_uri": None,
+        }
+        import json
 
+        # Create a mock redis client
+        mock_redis = MagicMock()
+        mock_redis.get.return_value = json.dumps(state_data).encode("utf-8")
+
+        # Patch get_redis_client to return our mock
+        with patch("app.services.providers.templates.base_oauth.get_redis_client", return_value=mock_redis):
             # Act
             assert suunto_strategy.oauth is not None
             oauth_state = suunto_strategy.oauth.handle_callback(db, "test_code", "test_state")
@@ -197,7 +201,7 @@ class TestSuuntoImport:
         result = suunto_strategy.workouts.load_data(db, user.id, since=0, limit=50)
 
         # Assert
-        assert result is True
+        assert result == 2
         assert mock_create.call_count == 2  # Two workouts
         assert mock_create_detail.call_count == 2  # Two workout details
         # Verify data source creation was attempted
@@ -207,7 +211,7 @@ class TestSuuntoImport:
         """Should correctly map Suunto activity IDs to unified workout types."""
         # Arrange
         from app.constants.workout_types.suunto import get_unified_workout_type
-        from app.schemas.workout_types import WorkoutType
+        from app.schemas.enums import WorkoutType
 
         # Act & Assert
         assert get_unified_workout_type(1) == WorkoutType.RUNNING

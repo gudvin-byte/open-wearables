@@ -1,15 +1,18 @@
 repos:
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.14.2
-    hooks:
-      # Run the linter
-      - id: ruff-check
-        args: [--fix]
-      # Run the formatter
-      - id: ruff-format
-
   - repo: local
     hooks:
+      - id: ruff-check
+        name: ruff check
+        entry: sh -c 'cd backend && uv run ruff check --fix'
+        language: system
+        files: ^backend/.*\.py$
+        pass_filenames: false
+      - id: ruff-format
+        name: ruff format
+        entry: sh -c 'cd backend && uv run ruff format'
+        language: system
+        files: ^backend/.*\.py$
+        pass_filenames: false
       - id: ty
         name: ty check
         entry: sh -c 'cd backend && uv run ty check .'
@@ -21,9 +24,9 @@ repos:
     rev: v6.0.0
     hooks:
       - id: trailing-whitespace
-        files: ^backend/
+        files: ^(backend|mcp)/
       - id: end-of-file-fixer
-        files: ^backend/
+        files: ^(backend|mcp)/
       - id: check-merge-conflict
         args: [--assume-in-merge]
-        files: ^backend/
+        files: ^(backend|mcp)/

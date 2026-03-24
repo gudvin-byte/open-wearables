@@ -45,12 +45,16 @@ class Settings(BaseSettings):
     SENTRY_DSN: str | None = None
     SENTRY_SAMPLES_RATE: float = 0.5
     SENTRY_ENV: str | None = None
+    SENTRY_SERVER_NAME: str | None = None
 
     # AUTH SETTINGS
     secret_key: str
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
     token_lifetime: int = 3600
+
+    # VALIDATION SETTINGS
+    min_password_length: int = 8
 
     # REDIS SETTINGS
     redis_host: str = "localhost"
@@ -59,11 +63,15 @@ class Settings(BaseSettings):
     redis_password: SecretStr | None = None
     redis_username: str | None = None  # Redis 6.0+ ACL
 
+    # ADMIN ACCOUNT SEED
+    admin_email: str = "admin@admin.com"
+    admin_password: SecretStr = SecretStr("your-secure-password")
+
     # Time to live for sleep state in Redis
     redis_sleep_ttl_seconds: int = 24 * 3600  # 24 hours
 
     # Time between sleep phases to conclude end of sleep session
-    sleep_end_gap_minutes: int = 60  # 1 hour
+    sleep_end_gap_minutes: int = 120  # 2 hours
 
     # SYNC SETTINGS
     sync_interval_seconds: int = 3600  # Default: 1 hour (3600 seconds)
@@ -94,6 +102,34 @@ class Settings(BaseSettings):
     whoop_redirect_uri: str = "http://localhost:8000/api/v1/oauth/whoop/callback"
     whoop_default_scope: str = "offline read:cycles read:sleep read:recovery read:workout"
 
+    # FITBIT OAUTH SETTINGS
+    fitbit_client_id: str | None = None
+    fitbit_client_secret: SecretStr | None = None
+    fitbit_redirect_uri: str = "http://localhost:8000/api/v1/oauth/fitbit/callback"
+    fitbit_default_scope: str = "activity heartrate sleep profile"
+
+    # OURA OAUTH SETTINGS
+    oura_client_id: str | None = None
+    oura_client_secret: SecretStr | None = None
+    oura_redirect_uri: str = "http://localhost:8000/api/v1/oauth/oura/callback"
+    oura_default_scope: str = "personal daily activity heartrate workout session spo2 ring_configuration"
+    oura_webhook_verification_token: SecretStr | None = None
+
+    # STRAVA OAUTH SETTINGS
+    strava_client_id: str | None = None
+    strava_client_secret: SecretStr | None = None
+    strava_redirect_uri: str = "http://localhost:8000/api/v1/oauth/strava/callback"
+    strava_default_scope: str = "activity:read_all,profile:read_all"
+    strava_webhook_verify_token: str = "open-wearables-strava-verify"
+    # Strava API max is 200 activities per page
+    strava_events_per_page: int = 200
+
+    # ULTRAHUMAN OAUTH SETTINGS
+    ultrahuman_client_id: str | None = None
+    ultrahuman_client_secret: SecretStr | None = None
+    ultrahuman_redirect_uri: str = "http://localhost:8000/api/v1/oauth/ultrahuman/callback"
+    ultrahuman_default_scope: str = "ring_data cgm_data profile"
+
     # EMAIL SETTINGS (Resend)
     resend_api_key: SecretStr | None = None
     email_from_address: str | None = None
@@ -108,11 +144,19 @@ class Settings(BaseSettings):
     # AWS SETTINGS
     aws_bucket_name: str | None = None
     aws_access_key_id: str | None = None
-    aws_secret_access_key: str | None = None
+    aws_secret_access_key: SecretStr | None = None
     aws_region: str = "eu-north-1"
-    sqs_queue_url: str | None = None
+    # for topic ARN verification from SNS notification (signature is verified regardless)
+    aws_sns_topic_arn: SecretStr | None = None
 
     xml_chunk_size: int = 50_000
+
+    # RAW PAYLOAD STORAGE
+    raw_payload_storage: str = "disabled"  # disabled | log | s3
+    raw_payload_max_size_bytes: int = 10 * 1024 * 1024  # 10 MB
+    raw_payload_s3_bucket: str | None = None  # defaults to aws_bucket_name if not set
+    raw_payload_s3_prefix: str = "raw-payloads"
+    raw_payload_s3_endpoint_url: str | None = None  # for S3-compatible storage (e.g. Railway Object Storage)
 
     @field_validator("cors_origins", mode="after")
     @classmethod

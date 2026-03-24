@@ -2,7 +2,7 @@
 
 import pytest
 
-from app.schemas.oauth import ProviderName
+from app.schemas.enums import ProviderName
 
 
 class TestProviderNameFromSourceString:
@@ -31,13 +31,21 @@ class TestProviderNameFromSourceString:
             ("whoop_4.0", ProviderName.WHOOP),
             ("Whoop Strap", ProviderName.WHOOP),
             ("WHOOP", ProviderName.WHOOP),
+            # Samsung variations
+            ("samsung_health", ProviderName.SAMSUNG),
+            ("samsung_health_sdk", ProviderName.SAMSUNG),
+            ("Samsung Galaxy Watch", ProviderName.SAMSUNG),
+            ("SAMSUNG", ProviderName.SAMSUNG),
             # Oura variations
             ("oura_ring", ProviderName.OURA),
             ("Oura Gen 3", ProviderName.OURA),
             ("OURA", ProviderName.OURA),
+            # Fitbit variations
+            ("fitbit", ProviderName.FITBIT),
+            ("Fitbit", ProviderName.FITBIT),
+            ("FITBIT", ProviderName.FITBIT),
+            ("fitbit_sense", ProviderName.FITBIT),
             # Unknown cases
-            ("fitbit", ProviderName.UNKNOWN),
-            ("samsung_health", ProviderName.UNKNOWN),
             ("unknown_device", ProviderName.UNKNOWN),
             ("", ProviderName.UNKNOWN),
         ],

@@ -47,7 +47,7 @@ def engine() -> Any:
     from sqlalchemy.orm import Session as SessionClass
 
     from app.models import SeriesTypeDefinition
-    from app.schemas.series_types import SERIES_TYPE_DEFINITIONS
+    from app.schemas.enums import SERIES_TYPE_DEFINITIONS
 
     with SessionClass(bind=test_engine) as session:
         for type_id, enum, unit in SERIES_TYPE_DEFINITIONS:
@@ -163,17 +163,14 @@ def mock_redis(monkeypatch: pytest.MonkeyPatch) -> Generator[MagicMock, None, No
 @pytest.fixture(autouse=True)
 def mock_celery_tasks(monkeypatch: pytest.MonkeyPatch) -> Generator[MagicMock, None, None]:
     """Mock Celery tasks to run synchronously."""
-    # Mock the poll_sqs_task specifically
     mock_task = MagicMock()
     mock_task.delay.return_value = MagicMock()
     mock_task.apply_async.return_value = MagicMock()
 
     with (
         patch("celery.current_app") as mock_celery,
-        patch("app.integrations.celery.tasks.poll_sqs_task.poll_sqs_task", mock_task),
-        patch("app.api.routes.v1.import_xml.poll_sqs_task", mock_task),
-        # Patch the new finalize_stale_sleeps task that was added in this PR
-        patch("app.integrations.celery.tasks.process_apple_upload_task.finalize_stale_sleeps", mock_task),
+        # Patch Garmin backfill task dispatched from webhook route
+        patch("app.api.routes.v1.garmin_webhooks.trigger_next_pending_type", mock_task),
     ):
         # Configure Celery to use in-memory broker and result backend
         # We Mock the conf object to return our test settings
@@ -215,14 +212,27 @@ def mock_external_apis() -> Generator[dict[str, MagicMock], None, None]:
     mock_s3.head_bucket.return_value = {}
     mock_s3.put_object.return_value = {"ETag": "test-etag"}
 
+    webhook_module = "app.api.routes.v1.garmin_webhooks"
+
     with (
         patch("httpx.AsyncClient") as mock_httpx,
         patch("boto3.client", return_value=mock_s3) as mock_boto3,
         patch("requests.Session") as mock_requests,
         patch("app.services.apple.apple_xml.aws_service.AWS_BUCKET_NAME", "test-bucket"),
         patch("app.services.apple.apple_xml.presigned_url_service.AWS_BUCKET_NAME", "test-bucket"),
-        patch("app.services.apple.apple_xml.aws_service.s3_client", mock_s3),
-        patch("app.services.apple.apple_xml.presigned_url_service.s3_client", mock_s3),
+        patch("app.services.apple.apple_xml.aws_service.get_s3_client", return_value=mock_s3),
+        patch("app.services.apple.apple_xml.presigned_url_service.get_s3_client", return_value=mock_s3),
+        patch("app.integrations.celery.tasks.process_aws_upload_task.get_s3_client", return_value=mock_s3),
+        patch(
+            "app.services.apple.apple_xml.presigned_url_service.presigned_url_service.s3_client", mock_s3, create=True
+        ),
+        patch(f"{webhook_module}.get_trace_id", return_value=None),
+        patch(f"{webhook_module}.mark_type_success", return_value=False),
+        patch(
+            f"{webhook_module}.get_backfill_status",
+            return_value={"overall_status": "complete", "current_window": 0, "total_windows": 0},
+        ),
+        patch(f"{webhook_module}.trigger_next_pending_type", return_value={}),
     ):
         mocks["httpx"] = mock_httpx
         mocks["boto3"] = mock_boto3

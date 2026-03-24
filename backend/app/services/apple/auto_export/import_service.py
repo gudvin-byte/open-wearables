@@ -6,19 +6,22 @@ from typing import Iterable
 from uuid import UUID, uuid4
 
 from app.database import DbSession
-from app.schemas import (
-    AEWorkoutJSON,
+from app.schemas.model_crud.activities import (
     EventRecordCreate,
     EventRecordDetailCreate,
     EventRecordMetrics,
     HeartRateSampleCreate,
-    RootJSON,
-    UploadDataResponse,
 )
+from app.schemas.providers.apple.auto_export import (
+    RootJSON,
+)
+from app.schemas.providers.apple.auto_export import (
+    WorkoutJSON as AEWorkoutJSON,
+)
+from app.schemas.responses.upload import UploadDataResponse
 from app.services.event_record_service import event_record_service
 from app.services.timeseries_service import timeseries_service
 from app.utils.exceptions import handle_exceptions
-from app.utils.sentry_helpers import log_and_capture_error
 from app.utils.structured_logging import log_structured
 
 APPLE_DT_FORMAT = "%Y-%m-%d %H:%M:%S %z"
@@ -199,6 +202,7 @@ class ImportService:
                     self.log,
                     "warning",
                     "No valid data found in request",
+                    provider="apple",
                     action="apple_ae_validate_data",
                     batch_id=batch_id,
                     user_id=user_id,
@@ -217,6 +221,7 @@ class ImportService:
                 self.log,
                 "info",
                 "Apple Auto Export data import completed",
+                provider="apple",
                 action="apple_ae_import_complete",
                 batch_id=batch_id,
                 user_id=user_id,
@@ -231,16 +236,11 @@ class ImportService:
                 self.log,
                 "error",
                 f"Import failed for user {user_id}: {e}",
+                provider="apple",
                 action="apple_ae_import_failed",
                 batch_id=batch_id,
                 user_id=user_id,
                 error_type=type(e).__name__,
-            )
-            log_and_capture_error(
-                e,
-                self.log,
-                f"Import failed for user {user_id}: {e}",
-                extra={"user_id": user_id, "batch_id": batch_id},
             )
             return UploadDataResponse(status_code=400, response=f"Import failed: {str(e)}", user_id=user_id)
 

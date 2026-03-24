@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any, Iterable
@@ -5,14 +6,18 @@ from uuid import UUID, uuid4
 
 from app.constants.workout_types.garmin import get_unified_workout_type
 from app.database import DbSession
-from app.schemas import (
+from app.schemas.model_crud.activities import (
     EventRecordCreate,
     EventRecordDetailCreate,
     EventRecordMetrics,
-    GarminActivityJSON,
 )
+from app.schemas.providers.garmin import ActivityJSON as GarminActivityJSON
 from app.services.event_record_service import event_record_service
 from app.services.providers.templates.base_workouts import BaseWorkoutsTemplate
+from app.utils.dates import offset_to_iso
+from app.utils.structured_logging import log_structured
+
+logger = logging.getLogger(__name__)
 
 
 class GarminWorkouts(BaseWorkoutsTemplate):
@@ -81,10 +86,12 @@ class GarminWorkouts(BaseWorkoutsTemplate):
                     all_activities.extend(activities)
             except Exception as e:
                 # Log error but continue with other chunks
-                import logging
-
-                logging.getLogger(__name__).warning(
-                    f"Error fetching activities chunk ({current_start.isoformat()} to {current_end.isoformat()}): {e}"
+                log_structured(
+                    logger,
+                    "warning",
+                    f"Error fetching activities chunk ({current_start.isoformat()} to {current_end.isoformat()}): {e}",
+                    provider="garmin",
+                    task="get_workouts_historical",
                 )
 
             current_start = current_end
@@ -209,6 +216,8 @@ class GarminWorkouts(BaseWorkoutsTemplate):
         # Use device name if available, otherwise fallback to "Garmin"
         device_name = raw_workout.deviceName or "Garmin"
 
+        zone_offset = offset_to_iso(raw_workout.startTimeOffsetInSeconds)
+
         record = EventRecordCreate(
             category="workout",
             type=workout_type.value,
@@ -217,6 +226,7 @@ class GarminWorkouts(BaseWorkoutsTemplate):
             duration_seconds=duration_seconds,
             start_datetime=start_date,
             end_datetime=end_date,
+            zone_offset=zone_offset,
             id=workout_id,
             external_id=str(raw_workout.activityId),  # Convert to str (push sends int)
             source="garmin",
@@ -244,59 +254,14 @@ class GarminWorkouts(BaseWorkoutsTemplate):
         db: DbSession,
         user_id: UUID,
         **kwargs: Any,
-    ) -> bool:
-        """Load data from Garmin API via backfill.
+    ) -> int:
+        """No-op: Garmin activity data arrives via webhooks.
 
-        Note: Garmin Health API requires pull tokens for direct polling.
-        Instead, we use the backfill API which triggers Garmin to send
-        data to our configured webhooks asynchronously.
+        REST/summary endpoints are not used. Historical data is fetched
+        via the backfill API which delivers data through webhooks.
         """
-        from contextlib import suppress
-
-        from app.services.providers.garmin.backfill import GarminBackfillService
-
-        # Parse date range from kwargs
-        start_dt: datetime | None = None
-        end_dt: datetime | None = None
-
-        summary_start_time = kwargs.get("summary_start_time")
-        summary_end_time = kwargs.get("summary_end_time")
-
-        if summary_start_time:
-            with suppress(ValueError, AttributeError):
-                if isinstance(summary_start_time, str):
-                    start_dt = datetime.fromisoformat(summary_start_time.replace("Z", "+00:00"))
-                elif isinstance(summary_start_time, datetime):
-                    start_dt = summary_start_time
-
-        if summary_end_time:
-            with suppress(ValueError, AttributeError):
-                if isinstance(summary_end_time, str):
-                    end_dt = datetime.fromisoformat(summary_end_time.replace("Z", "+00:00"))
-                elif isinstance(summary_end_time, datetime):
-                    end_dt = summary_end_time
-
-        # Use backfill API - data will arrive via webhooks
-        backfill_service = GarminBackfillService(
-            provider_name=self.provider_name,
-            api_base_url=self.api_base_url,
-            oauth=self.oauth,
-        )
-
-        result = backfill_service.trigger_backfill(
-            db=db,
-            user_id=user_id,
-            data_types=["activities"],
-            start_time=start_dt,
-            end_time=end_dt,
-        )
-
-        self.logger.info(
-            f"Garmin activities backfill triggered for user {user_id}: "
-            f"triggered={result['triggered']}, failed={result['failed']}"
-        )
-
-        return "activities" in result["triggered"]
+        self.logger.info(f"Garmin activities for user {user_id} arrive via webhooks (no REST fetch)")
+        return 0
 
     def get_activity_detail(
         self,

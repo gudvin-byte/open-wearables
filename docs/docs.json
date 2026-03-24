@@ -25,13 +25,17 @@
             "group": "Architecture",
             "pages": [
               "architecture/system-overview",
-              "architecture/unified-data-model"
+              "architecture/unified-data-model",
+              "architecture/data-types"
             ]
           },
           {
             "group": "Providers",
             "pages": [
-              "provider-setup/index"
+              "providers/supported",
+              "providers/coverage",
+              "providers/garmin-api-integration",
+              "providers/garmin-data-pipeline"
             ]
           },
           {
@@ -39,12 +43,37 @@
             "pages": [
               "sdk/index",
               {
+                "group": "iOS (Swift)",
+                "pages": [
+                  "sdk/ios/index",
+                  "sdk/ios/integration",
+                  "sdk/ios/troubleshooting"
+                ]
+              },
+              {
+                "group": "Android (Kotlin)",
+                "pages": [
+                  "sdk/android/index",
+                  "sdk/android/integration",
+                  "sdk/android/troubleshooting"
+                ]
+              },
+              {
                 "group": "Flutter",
                 "pages": [
                   "sdk/flutter/index",
                   "sdk/flutter/example-app",
                   "sdk/flutter/integration",
                   "sdk/flutter/troubleshooting"
+                ]
+              },
+              {
+                "group": "React Native",
+                "pages": [
+                  "sdk/react-native/index",
+                  "sdk/react-native/example-app",
+                  "sdk/react-native/integration",
+                  "sdk/react-native/troubleshooting"
                 ]
               }
             ]
@@ -62,8 +91,20 @@
             "pages": [
               "dev-guides/backend-e2e-integration",
               "dev-guides/how-to-add-new-provider",
-              "dev-guides/aws-setup",
               "dev-guides/ngrok-setup"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "dev-guides/aws-setup",
+              "dev-guides/raw-payload-storage"
+            ]
+          },
+          {
+            "group": "Deployment",
+            "pages": [
+              "deployment/railway"
             ]
           },
           {
@@ -91,8 +132,6 @@
               "api-reference/guides/quick-integration",
               "api-reference/guides/apple-xml-import",
               "api-reference/guides/provider-setup",
-              "api-reference/guides/data-types",
-              "api-reference/guides/provider-coverage",
               "api-reference/guides/error-handling"
             ]
           }
@@ -105,6 +144,11 @@
           "anchor": "GitHub",
           "href": "https://github.com/the-momentum/open-wearables",
           "icon": "github"
+        },
+        {
+          "anchor": "Discord",
+          "href": "https://discord.gg/qrcfFnNE6H",
+          "icon": "discord"
         },
         {
           "anchor": "Discussions",
@@ -128,19 +172,20 @@
   },
   "contextual": {
     "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
+      "copy",
+      "view",
+      "chatgpt",
+      "claude",
+      "perplexity",
+      "mcp",
+      "cursor",
+      "vscode"
+    ]
   },
   "footer": {
     "socials": {
-      "github": "https://github.com/the-momentum/open-wearables"
+      "github": "https://github.com/the-momentum/open-wearables",
+      "discord": "https://discord.gg/qrcfFnNE6H"
     }
   }
 }

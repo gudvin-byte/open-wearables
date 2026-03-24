@@ -19,9 +19,13 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
-from app.schemas.event_record import EventRecordCreate
-from app.schemas.event_record_detail import EventRecordDetailCreate
-from app.schemas.oauth import ConnectionStatus, OAuthTokenResponse, UserConnectionCreate
+from app.schemas.auth import ConnectionStatus
+from app.schemas.model_crud.activities import (
+    EventRecordCreate,
+    EventRecordDetailCreate,
+)
+from app.schemas.model_crud.credentials import OAuthTokenResponse
+from app.schemas.model_crud.user_management import UserConnectionCreate
 
 
 class TestEventRecordCreateValidation:
@@ -92,6 +96,18 @@ class TestEventRecordDetailCreateValidation:
         assert detail.heart_rate_max == 175
         assert detail.heart_rate_avg == Decimal("145.5")
         assert detail.steps_count == 8500
+
+    def test_steps_count_rejects_fractional_decimal(self) -> None:
+        """Should raise ValidationError when steps_count is a fractional Decimal."""
+        record_id = uuid4()
+
+        with pytest.raises(ValidationError) as exc_info:
+            EventRecordDetailCreate(
+                record_id=record_id,
+                steps_count=Decimal("2981.57515735105"),
+            )
+
+        assert "steps_count" in str(exc_info.value)
 
     def test_missing_required_field_record_id(self) -> None:
         """Should raise ValidationError when record_id is missing."""

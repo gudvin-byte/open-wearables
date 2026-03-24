@@ -11,16 +11,22 @@ from app.database import DbSession
 from app.models import DataPointSeries, DataSource, DeviceTypePriority, ProviderPriority
 from app.repositories.data_source_repository import DataSourceRepository
 from app.repositories.repositories import CrudRepository
-from app.schemas import (
-    ActiveMinutesResult,
-    ActivityAggregateResult,
-    IntensityMinutesResult,
+from app.schemas.enums import (
     ProviderName,
+    SeriesType,
+    get_series_type_from_id,
+    get_series_type_id,
+)
+from app.schemas.model_crud.activities import (
     TimeSeriesQueryParams,
     TimeSeriesSampleCreate,
     TimeSeriesSampleUpdate,
 )
-from app.schemas.series_types import SeriesType, get_series_type_from_id, get_series_type_id
+from app.schemas.responses.activity import (
+    ActiveMinutesResult,
+    ActivityAggregateResult,
+    IntensityMinutesResult,
+)
 from app.utils.exceptions import handle_exceptions
 from app.utils.pagination import decode_cursor
 
@@ -32,6 +38,10 @@ class DataPointSeriesRepository(
     CrudRepository[DataPointSeries, TimeSeriesSampleCreate, TimeSeriesSampleUpdate],
 ):
     """Repository for unified device data point series."""
+
+    # PostgreSQL/psycopg limit: 65535 params per query. With 7 params per row, max ~9362 rows.
+    # Use 9000 as a safe chunk size.
+    BATCH_INSERT_CHUNK_SIZE = 9_000
 
     def __init__(self, model: type[DataPointSeries]):
         super().__init__(model)
@@ -86,7 +96,7 @@ class DataPointSeriesRepository(
         # 2. Build and execute data point batch insert
         self._insert_data_points(db_session, creators, identity_to_source_id)
 
-        # Return empty list (ON CONFLICT DO NOTHING means strict tracking is omitted)
+        # Return empty list (upsert path does not track individual inserts vs updates)
         return []
 
     def _resolve_data_sources(
@@ -121,7 +131,11 @@ class DataPointSeriesRepository(
         creators: list[TimeSeriesSampleCreate],
         source_map: dict[DataSourceIdentity, UUID],
     ) -> None:
-        """Batch insert data points."""
+        """Batch insert data points.
+
+        Inserts data points in batches to stay within PostgreSQL's parameter limit
+        of 65,535 parameters per query. With 6 fields per record, we batch at ~10k records.
+        """
         values_list = []
         for creator in creators:
             identity: DataSourceIdentity = (creator.user_id, creator.device_model, creator.source)
@@ -137,18 +151,33 @@ class DataPointSeriesRepository(
                     "external_id": creator.external_id,
                     "data_source_id": source_id,
                     "recorded_at": creator.recorded_at,
+                    "zone_offset": creator.zone_offset,
                     "value": creator.value,
                     "series_type_definition_id": get_series_type_id(creator.series_type),
                 }
             )
 
         if values_list:
-            stmt = (
-                insert(self.model)
-                .values(values_list)
-                .on_conflict_do_nothing(index_elements=["data_source_id", "series_type_definition_id", "recorded_at"])
-            )
-            db_session.execute(stmt)
+            # Deduplicate within the batch: PostgreSQL cannot upsert the same row
+            # twice in one INSERT. Keep the last value for each conflict key.
+            deduped: dict[tuple, dict] = {}
+            for v in values_list:
+                key = (v["data_source_id"], v["series_type_definition_id"], v["recorded_at"])
+                deduped[key] = v
+            values_list = list(deduped.values())
+
+            for i in range(0, len(values_list), self.BATCH_INSERT_CHUNK_SIZE):
+                chunk = values_list[i : i + self.BATCH_INSERT_CHUNK_SIZE]
+                stmt = insert(self.model).values(chunk)
+                stmt = stmt.on_conflict_do_update(
+                    index_elements=["data_source_id", "series_type_definition_id", "recorded_at"],
+                    set_={
+                        "value": stmt.excluded.value,
+                        "external_id": stmt.excluded.external_id,
+                        "zone_offset": stmt.excluded.zone_offset,
+                    },
+                )
+                db_session.execute(stmt)
             # NOTE: Caller should commit - allows batching multiple operations
 
     def try_commit(self, db_session: DbSession, creation: DataPointSeries) -> DataPointSeries:
