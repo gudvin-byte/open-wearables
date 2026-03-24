@@ -92,27 +92,27 @@ class TestUltrahumanSleepDataIntegration:
                 assert record.end_datetime is not None
 
                 details = db.query(SleepDetails).filter(SleepDetails.record_id == record.id).first()
-                if details:
-                    assert details.sleep_efficiency_score is not None
-                    assert details.sleep_deep_minutes is not None
-                    assert details.sleep_light_minutes is not None
-                    assert details.sleep_rem_minutes is not None
-                    assert details.sleep_awake_minutes is not None
+                assert details is not None, f"SleepDetails missing for record {record.id}"
+                assert details.sleep_efficiency_score is not None
+                assert details.sleep_deep_minutes is not None
+                assert details.sleep_light_minutes is not None
+                assert details.sleep_rem_minutes is not None
+                assert details.sleep_awake_minutes is not None
 
-                    total = (
-                        (details.sleep_deep_minutes or 0)
-                        + (details.sleep_light_minutes or 0)
-                        + (details.sleep_rem_minutes or 0)
-                        + (details.sleep_awake_minutes or 0)
-                    )
-                    total_sleep = (
-                        (details.sleep_deep_minutes or 0)
-                        + (details.sleep_light_minutes or 0)
-                        + (details.sleep_rem_minutes or 0)
-                    )
+                total = (
+                    (details.sleep_deep_minutes or 0)
+                    + (details.sleep_light_minutes or 0)
+                    + (details.sleep_rem_minutes or 0)
+                    + (details.sleep_awake_minutes or 0)
+                )
+                total_sleep = (
+                    (details.sleep_deep_minutes or 0)
+                    + (details.sleep_light_minutes or 0)
+                    + (details.sleep_rem_minutes or 0)
+                )
 
-                    assert total >= 0, "Total minutes should be non-negative"
-                    assert total_sleep >= 0, "Total sleep minutes should be non-negative"
+                assert total >= 0, "Total minutes should be non-negative"
+                assert total_sleep >= 0, "Total sleep minutes should be non-negative"
 
     def test_sleep_efficiency_extraction_with_mocked_api(
         self, db: Session, sample_ultrahuman_api_response: dict
@@ -147,11 +147,11 @@ class TestUltrahumanSleepDataIntegration:
 
             for record in records:
                 details = db.query(SleepDetails).filter(SleepDetails.record_id == record.id).first()
-                if details:
-                    assert details.sleep_efficiency_score is not None, "Sleep efficiency should not be null"
-                    assert 0 <= details.sleep_efficiency_score <= 100, (
-                        f"Sleep efficiency {details.sleep_efficiency_score} should be 0-100"
-                    )
+                assert details is not None, f"SleepDetails missing for record {record.id}"
+                assert details.sleep_efficiency_score is not None, "Sleep efficiency should not be null"
+                assert 0 <= details.sleep_efficiency_score <= 100, (
+                    f"Sleep efficiency {details.sleep_efficiency_score} should be 0-100"
+                )
 
     def test_sleep_stage_values_are_nonzero_with_mocked_api(
         self, db: Session, sample_ultrahuman_api_response: dict
@@ -187,16 +187,16 @@ class TestUltrahumanSleepDataIntegration:
             all_zero = True
             for record in records:
                 details = db.query(SleepDetails).filter(SleepDetails.record_id == record.id).first()
-                if details:
-                    stage_sum = (
-                        (details.sleep_deep_minutes or 0)
-                        + (details.sleep_light_minutes or 0)
-                        + (details.sleep_rem_minutes or 0)
-                        + (details.sleep_awake_minutes or 0)
-                    )
-                    if stage_sum > 0:
-                        all_zero = False
-                        break
+                assert details is not None, f"SleepDetails missing for record {record.id}"
+                stage_sum = (
+                    (details.sleep_deep_minutes or 0)
+                    + (details.sleep_light_minutes or 0)
+                    + (details.sleep_rem_minutes or 0)
+                    + (details.sleep_awake_minutes or 0)
+                )
+                if stage_sum > 0:
+                    all_zero = False
+                    break
 
             assert not all_zero, "All sleep stage values are zero - parsing may be broken"
 
@@ -268,11 +268,11 @@ class TestUltrahumanActivitySamplesIntegration:
                     samples_by_type[sample.series_type_definition_id] = 0
                 samples_by_type[sample.series_type_definition_id] += 1
 
-            series_types = {1: "heart_rate", 2: "hrv", 3: "body_temperature", 80: "steps"}
+            expected_types = {1: "heart_rate", 3: "heart_rate_variability_sdnn", 45: "body_temperature", 80: "steps"}
 
-            for type_id, count in samples_by_type.items():
-                type_name = series_types.get(type_id, f"unknown_{type_id}")
-                assert count > 0, f"{type_name} should have samples"
+            for type_id, type_name in expected_types.items():
+                assert type_id in samples_by_type, f"{type_name} (id={type_id}) missing from synced samples"
+                assert samples_by_type[type_id] > 0, f"{type_name} should have samples"
 
     def test_heart_rate_values_are_reasonable_with_mocked_api(
         self, db: Session, sample_ultrahuman_api_response: dict
@@ -306,6 +306,7 @@ class TestUltrahumanActivitySamplesIntegration:
             .all()
         )
 
+        assert len(samples) > 0, "No heart rate samples found"
         for sample in samples:
             value = float(sample.value)
             assert 40 <= value <= 200, f"Heart rate {value} is outside realistic range"
@@ -342,6 +343,7 @@ class TestUltrahumanActivitySamplesIntegration:
             .all()
         )
 
+        assert len(samples) > 0, "No temperature samples found"
         for sample in samples:
             value = float(sample.value)
             assert 35 <= value <= 42, f"Temperature {value} is outside realistic range"
@@ -366,6 +368,7 @@ class TestUltrahumanActivitySamplesIntegration:
 
         samples = db.query(DataPointSeries).join(DataSource).filter(DataSource.user_id == user.id).all()
 
+        assert len(samples) > 0, "No activity samples found"
         for sample in samples:
             assert sample.recorded_at.tzinfo is not None, f"Timestamp {sample.recorded_at} has no timezone info"
             assert sample.recorded_at.tzinfo == timezone.utc, f"Timestamp {sample.recorded_at} is not UTC"

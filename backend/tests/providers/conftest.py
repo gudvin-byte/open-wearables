@@ -274,7 +274,7 @@ def sample_ultrahuman_sleep_data() -> dict:
         ],
         "sleep_stages": [
             {"type": "deep_sleep", "stage_time": 3600},
-            {"type": "light_sleep", "value": 16200},
+            {"type": "light_sleep", "stage_time": 16200},
             {"type": "rem_sleep", "stage_time": 3600},
             {"type": "awake", "stage_time": 1800},
         ],

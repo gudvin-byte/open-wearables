@@ -30,7 +30,7 @@ class Ultrahuman247Data(Base247DataTemplate):
         provider_name: str,
         api_base_url: str,
         oauth: BaseOAuthTemplate,
-    ):
+    ) -> None:
         super().__init__(provider_name, api_base_url, oauth)
         self.event_record_repo = EventRecordRepository(EventRecord)
         self.connection_repo = UserConnectionRepository()
@@ -480,10 +480,6 @@ class Ultrahuman247Data(Base247DataTemplate):
 
             try:
                 metrics_list = self._fetch_daily_metrics(db, user_id, current_date)
-
-                # Check if metrics fetch failed (returned empty for non-recoverable errors)
-                if not metrics_list:
-                    day_error = "No data available"
 
                 # Group items by type
                 items_by_type = {}

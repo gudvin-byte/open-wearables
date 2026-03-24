@@ -7,12 +7,12 @@ Tests the UltrahumanOAuth class for OAuth 2.0 authentication flow with Ultrahuma
 from unittest.mock import MagicMock, patch
 
 import httpx
-from app.schemas.oauth import AuthenticationMethod
 from sqlalchemy.orm import Session
 
 from app.models import User
 from app.repositories.user_connection_repository import UserConnectionRepository
 from app.repositories.user_repository import UserRepository
+from app.schemas.auth.authentication_method import AuthenticationMethod
 from app.schemas.model_crud.credentials import OAuthTokenResponse
 from app.services.providers.ultrahuman.oauth import UltrahumanOAuth
 from tests.factories import UserFactory

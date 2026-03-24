@@ -6,6 +6,9 @@ Tests the Ultrahuman247Data class for sleep, recovery, and activity data handlin
 
 from sqlalchemy.orm import Session
 
+from app.models import User
+from app.repositories.user_connection_repository import UserConnectionRepository
+from app.repositories.user_repository import UserRepository
 from app.services.providers.ultrahuman.data_247 import Ultrahuman247Data
 from app.services.providers.ultrahuman.oauth import UltrahumanOAuth
 from tests.factories import UserFactory
@@ -17,10 +20,6 @@ class TestUltrahuman247Data:
     def test_ultrahuman_247_initialization(self, db: Session) -> None:
         """Should initialize Ultrahuman247Data successfully."""
         # Arrange
-        from app.models import User
-        from app.repositories.user_connection_repository import UserConnectionRepository
-        from app.repositories.user_repository import UserRepository
-
         user_repo = UserRepository(User)
         connection_repo = UserConnectionRepository()
         oauth = UltrahumanOAuth(
